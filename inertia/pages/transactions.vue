@@ -2,8 +2,34 @@
 import { Head } from '@inertiajs/vue3'
 import { ref, computed, onMounted } from 'vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
-import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Loader2, Search, Filter, Calendar } from 'lucide-vue-next'
+import { Button } from '~/components/ui/button'
+import { 
+  Upload, 
+  FileSpreadsheet, 
+  CheckCircle2, 
+  AlertCircle, 
+  TrendingUp, 
+  TrendingDown, 
+  Loader2, 
+  Search,
+  X,
+  Tag,
+  Sparkles,
+  ShoppingBag,
+  Utensils,
+  Car,
+  Home,
+  Zap,
+  Smartphone,
+  Heart,
+  Gamepad2,
+  GraduationCap,
+  MoreHorizontal,
+  Check,
+  Trash2
+} from 'lucide-vue-next'
 import FloatingDock from '~/components/FloatingDock.vue'
+import { useCategoryRules, type Category } from '~/composables/useCategoryRules'
 
 interface Transaction {
   id: number
@@ -25,6 +51,18 @@ interface ImportResult {
   }
 }
 
+const { 
+  categories, 
+  rules,
+  initialize, 
+  addRule, 
+  removeRule,
+  getCategoryForTransaction,
+  getRuleForTransaction,
+  getMatchingRules,
+  extractKeywords 
+} = useCategoryRules()
+
 const fileInput = ref<HTMLInputElement | null>(null)
 const isDragging = ref(false)
 const isUploading = ref(false)
@@ -33,8 +71,29 @@ const transactions = ref<Transaction[]>([])
 const balance = ref<number>(0)
 const searchQuery = ref('')
 const filterType = ref<'all' | 'credit' | 'debit'>('all')
+const filterCategory = ref<string>('all')
 
-// Récupérer le token CSRF depuis le cookie
+// Modal state
+const isModalOpen = ref(false)
+const selectedTransaction = ref<Transaction | null>(null)
+const extractedKeywords = ref<string[]>([])
+const selectedKeywords = ref<string[]>([]) // Maintenant un tableau pour sélection multiple
+const customKeyword = ref('')
+
+const iconComponents: Record<string, any> = {
+  utensils: Utensils,
+  car: Car,
+  shopping: ShoppingBag,
+  home: Home,
+  zap: Zap,
+  smartphone: Smartphone,
+  heart: Heart,
+  gamepad: Gamepad2,
+  graduation: GraduationCap,
+  more: MoreHorizontal,
+  'trending-up': TrendingUp,
+}
+
 const getCsrfToken = (): string => {
   const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
   return match ? decodeURIComponent(match[1]) : ''
@@ -55,6 +114,22 @@ const formatDate = (dateStr: string) => {
   })
 }
 
+const getColorClasses = (color: string, type: 'bg' | 'text' | 'border' | 'bg-light') => {
+  const colors: Record<string, Record<string, string>> = {
+    emerald: { bg: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-500/30', 'bg-light': 'bg-emerald-500/10' },
+    green: { bg: 'bg-green-500', text: 'text-green-400', border: 'border-green-500/30', 'bg-light': 'bg-green-500/10' },
+    cyan: { bg: 'bg-cyan-500', text: 'text-cyan-400', border: 'border-cyan-500/30', 'bg-light': 'bg-cyan-500/10' },
+    blue: { bg: 'bg-blue-500', text: 'text-blue-400', border: 'border-blue-500/30', 'bg-light': 'bg-blue-500/10' },
+    violet: { bg: 'bg-violet-500', text: 'text-violet-400', border: 'border-violet-500/30', 'bg-light': 'bg-violet-500/10' },
+    pink: { bg: 'bg-pink-500', text: 'text-pink-400', border: 'border-pink-500/30', 'bg-light': 'bg-pink-500/10' },
+    amber: { bg: 'bg-amber-500', text: 'text-amber-400', border: 'border-amber-500/30', 'bg-light': 'bg-amber-500/10' },
+    rose: { bg: 'bg-rose-500', text: 'text-rose-400', border: 'border-rose-500/30', 'bg-light': 'bg-rose-500/10' },
+    orange: { bg: 'bg-orange-500', text: 'text-orange-400', border: 'border-orange-500/30', 'bg-light': 'bg-orange-500/10' },
+    slate: { bg: 'bg-slate-500', text: 'text-slate-400', border: 'border-slate-500/30', 'bg-light': 'bg-slate-500/10' },
+  }
+  return colors[color]?.[type] || colors.slate[type]
+}
+
 const totalDebits = computed(() => {
   return transactions.value
     .filter((t) => t.type === 'debit')
@@ -67,17 +142,38 @@ const totalCredits = computed(() => {
     .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
 })
 
+const uncategorizedCount = computed(() => {
+  return transactions.value.filter(t => 
+    t.type === 'debit' && !getCategoryForTransaction(t.label)
+  ).length
+})
+
 const filteredTransactions = computed(() => {
   return transactions.value.filter((t) => {
     const matchesSearch = searchQuery.value === '' || 
       t.label.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
       (t.merchant && t.merchant.toLowerCase().includes(searchQuery.value.toLowerCase()))
     
-    const matchesFilter = filterType.value === 'all' || t.type === filterType.value
+    const matchesType = filterType.value === 'all' || t.type === filterType.value
     
-    return matchesSearch && matchesFilter
+    let matchesCategory = true
+    if (filterCategory.value !== 'all') {
+      if (filterCategory.value === 'uncategorized') {
+        matchesCategory = !getCategoryForTransaction(t.label)
+      } else {
+        const cat = getCategoryForTransaction(t.label)
+        matchesCategory = cat?.id === filterCategory.value
+      }
+    }
+    
+    return matchesSearch && matchesType && matchesCategory
   })
 })
+
+// Obtenir les règles qui s'appliquent à cette transaction
+const getExistingRulesForTransaction = (label: string) => {
+  return getMatchingRules(label)
+}
 
 const handleDragOver = (e: DragEvent) => {
   e.preventDefault()
@@ -137,7 +233,6 @@ const uploadFile = async (file: File) => {
         message: result.message,
         data: result.data,
       }
-      // Recharger les transactions
       await loadTransactions()
     } else {
       uploadResult.value = {
@@ -152,7 +247,6 @@ const uploadFile = async (file: File) => {
     }
   } finally {
     isUploading.value = false
-    // Reset file input
     if (fileInput.value) {
       fileInput.value.value = ''
     }
@@ -160,7 +254,6 @@ const uploadFile = async (file: File) => {
 }
 
 const loadTransactions = async () => {
-  // Ne pas exécuter côté serveur (SSR)
   if (typeof window === 'undefined') return
   
   try {
@@ -173,8 +266,70 @@ const loadTransactions = async () => {
   }
 }
 
-// Charger les transactions au montage (côté client uniquement)
+// Ouvrir le modal de catégorisation
+const openCategorizeModal = (transaction: Transaction) => {
+  selectedTransaction.value = transaction
+  extractedKeywords.value = extractKeywords(transaction.label)
+  selectedKeywords.value = []
+  customKeyword.value = ''
+  isModalOpen.value = true
+}
+
+const closeModal = () => {
+  isModalOpen.value = false
+  selectedTransaction.value = null
+  extractedKeywords.value = []
+  selectedKeywords.value = []
+  customKeyword.value = ''
+}
+
+// Toggle sélection d'un mot-clé (ajout/retrait)
+const toggleKeyword = (keyword: string) => {
+  const index = selectedKeywords.value.indexOf(keyword)
+  if (index === -1) {
+    selectedKeywords.value.push(keyword)
+  } else {
+    selectedKeywords.value.splice(index, 1)
+  }
+}
+
+// Vérifier si un mot-clé est sélectionné
+const isKeywordSelected = (keyword: string) => {
+  return selectedKeywords.value.includes(keyword)
+}
+
+// Ajouter un mot-clé personnalisé à la sélection
+const addCustomKeyword = () => {
+  const keyword = customKeyword.value.trim().toLowerCase()
+  if (keyword && !selectedKeywords.value.includes(keyword)) {
+    selectedKeywords.value.push(keyword)
+    customKeyword.value = ''
+  }
+}
+
+// Retirer un mot-clé de la sélection
+const removeSelectedKeyword = (keyword: string) => {
+  const index = selectedKeywords.value.indexOf(keyword)
+  if (index !== -1) {
+    selectedKeywords.value.splice(index, 1)
+  }
+}
+
+// Assigner une catégorie aux mots-clés sélectionnés
+const assignCategory = (category: Category) => {
+  if (selectedKeywords.value.length === 0) return
+  
+  addRule(selectedKeywords.value, category.id)
+  closeModal()
+}
+
+// Supprimer une règle existante
+const removeExistingRule = (ruleId: string) => {
+  removeRule(ruleId)
+}
+
 onMounted(() => {
+  initialize()
   loadTransactions()
 })
 </script>
@@ -186,13 +341,21 @@ onMounted(() => {
     <!-- Header -->
     <header class="bg-slate-900/30 backdrop-blur-sm border-slate-800/50 border-b">
       <div class="mx-auto px-6 py-4 max-w-7xl">
-        <div class="flex items-center gap-3">
-          <div class="flex justify-center items-center rounded-xl w-10 h-10" style="background: linear-gradient(135deg, #34d399 0%, #06b6d4 100%);">
-            <span class="font-bold text-slate-950 text-lg">F</span>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="flex justify-center items-center rounded-xl w-10 h-10" style="background: linear-gradient(135deg, #34d399 0%, #06b6d4 100%);">
+              <span class="font-bold text-slate-950 text-lg">F</span>
+            </div>
+            <div>
+              <h1 class="font-semibold text-white text-xl tracking-tight">Transactions</h1>
+              <p class="text-slate-500 text-xs">Gérez et catégorisez vos opérations bancaires</p>
+            </div>
           </div>
-          <div>
-            <h1 class="font-semibold text-white text-xl tracking-tight">Transactions</h1>
-            <p class="text-slate-500 text-xs">Gérez et importez vos opérations bancaires</p>
+          
+          <!-- Uncategorized badge -->
+          <div v-if="uncategorizedCount > 0" class="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
+            <Tag class="w-4 h-4 text-amber-400" />
+            <span class="text-amber-400 text-sm font-medium">{{ uncategorizedCount }} non catégorisée{{ uncategorizedCount > 1 ? 's' : '' }}</span>
           </div>
         </div>
       </div>
@@ -256,7 +419,6 @@ onMounted(() => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <!-- Drop Zone -->
           <div
             @dragover="handleDragOver"
             @dragleave="handleDragLeave"
@@ -294,7 +456,6 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- Upload Result -->
           <div v-if="uploadResult" class="mt-4">
             <div
               :class="[
@@ -333,6 +494,8 @@ onMounted(() => {
             class="w-full h-10 bg-slate-900/50 border border-slate-800 rounded-lg pl-10 pr-4 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors"
           />
         </div>
+        
+        <!-- Type filters -->
         <div class="flex items-center gap-2">
           <button
             @click="filterType = 'all'"
@@ -368,6 +531,18 @@ onMounted(() => {
             Débits
           </button>
         </div>
+
+        <!-- Category filter -->
+        <select
+          v-model="filterCategory"
+          class="h-10 bg-slate-800/50 border border-slate-700 rounded-lg px-3 text-slate-300 text-sm focus:outline-none focus:border-cyan-500/50"
+        >
+          <option value="all">Toutes catégories</option>
+          <option value="uncategorized">Non catégorisées</option>
+          <option v-for="cat in categories" :key="cat.id" :value="cat.id">
+            {{ cat.name }}
+          </option>
+        </select>
       </div>
 
       <!-- Transactions List -->
@@ -381,6 +556,7 @@ onMounted(() => {
                 <span v-if="filteredTransactions.length !== transactions.length">
                   sur {{ transactions.length }}
                 </span>
+                • Cliquez sur une transaction pour la catégoriser
               </CardDescription>
             </div>
           </div>
@@ -390,22 +566,53 @@ onMounted(() => {
             <div
               v-for="transaction in filteredTransactions"
               :key="transaction.id"
-              class="flex justify-between items-center gap-4 hover:bg-slate-800/30 px-6 py-4 transition-colors"
+              @click="openCategorizeModal(transaction)"
+              class="flex justify-between items-center gap-4 hover:bg-slate-800/30 px-6 py-4 transition-colors cursor-pointer group"
             >
               <div class="flex flex-1 items-center gap-4 min-w-0">
+                <!-- Category icon or default -->
                 <div
                   :class="[
-                    'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
-                    transaction.type === 'credit' ? 'bg-emerald-500/10' : 'bg-rose-500/10',
+                    'w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors',
+                    getCategoryForTransaction(transaction.label)
+                      ? getColorClasses(getCategoryForTransaction(transaction.label)!.color, 'bg-light')
+                      : transaction.type === 'credit' 
+                        ? 'bg-emerald-500/10' 
+                        : 'bg-slate-700/50 group-hover:bg-amber-500/10',
                   ]"
                 >
-                  <TrendingUp v-if="transaction.type === 'credit'" class="w-5 h-5 text-emerald-400" />
-                  <TrendingDown v-else class="w-5 h-5 text-rose-400" />
+                  <component 
+                    v-if="getCategoryForTransaction(transaction.label)"
+                    :is="iconComponents[getCategoryForTransaction(transaction.label)!.icon] || MoreHorizontal"
+                    :class="['w-5 h-5', getColorClasses(getCategoryForTransaction(transaction.label)!.color, 'text')]"
+                  />
+                  <TrendingUp v-else-if="transaction.type === 'credit'" class="w-5 h-5 text-emerald-400" />
+                  <Tag v-else class="w-5 h-5 text-slate-500 group-hover:text-amber-400 transition-colors" />
                 </div>
+                
                 <div class="flex-1 min-w-0">
-                  <p class="font-medium text-white truncate">
-                    {{ transaction.merchant || transaction.label.substring(0, 50) }}
-                  </p>
+                  <div class="flex items-center gap-2">
+                    <p class="font-medium text-white truncate">
+                      {{ transaction.merchant || transaction.label.substring(0, 50) }}
+                    </p>
+                    <!-- Category badge -->
+                    <span 
+                      v-if="getCategoryForTransaction(transaction.label)"
+                      :class="[
+                        'px-2 py-0.5 rounded-full text-xs font-medium shrink-0',
+                        getColorClasses(getCategoryForTransaction(transaction.label)!.color, 'bg-light'),
+                        getColorClasses(getCategoryForTransaction(transaction.label)!.color, 'text')
+                      ]"
+                    >
+                      {{ getCategoryForTransaction(transaction.label)!.name }}
+                    </span>
+                    <span 
+                      v-else-if="transaction.type === 'debit'"
+                      class="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700/50 text-slate-500 shrink-0 group-hover:bg-amber-500/10 group-hover:text-amber-400 transition-colors"
+                    >
+                      Non catégorisée
+                    </span>
+                  </div>
                   <div class="flex items-center gap-2 mt-0.5">
                     <span class="text-slate-500 text-xs">{{ formatDate(transaction.date) }}</span>
                     <span v-if="transaction.paymentMethod" class="bg-slate-700/50 px-2 py-0.5 rounded-full text-slate-400 text-xs whitespace-nowrap">
@@ -425,7 +632,6 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- Empty filtered state -->
           <div v-if="filteredTransactions.length === 0" class="py-12 text-center">
             <Search class="w-10 h-10 text-slate-600 mx-auto mb-3" />
             <p class="text-slate-400">Aucune transaction trouvée</p>
@@ -448,8 +654,204 @@ onMounted(() => {
       </Card>
     </main>
 
-    <!-- Floating Dock Navigation -->
+    <!-- Categorization Modal -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div 
+          v-if="isModalOpen && selectedTransaction" 
+          class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        >
+          <div 
+            class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            @click="closeModal"
+          />
+          
+          <div class="relative bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <!-- Header -->
+            <div class="flex items-start justify-between mb-6">
+              <div>
+                <h2 class="text-white text-lg font-semibold flex items-center gap-2">
+                  <Sparkles class="w-5 h-5 text-cyan-400" />
+                  Catégoriser cette transaction
+                </h2>
+                <p class="text-slate-400 text-sm mt-1">
+                  Sélectionnez un ou plusieurs mots-clés, puis une catégorie
+                </p>
+              </div>
+              <button 
+                @click="closeModal"
+                class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X class="w-5 h-5" />
+              </button>
+            </div>
+
+            <!-- Transaction Info -->
+            <div class="bg-slate-800/50 rounded-xl p-4 mb-6">
+              <p class="text-white font-medium mb-1">{{ selectedTransaction.merchant || selectedTransaction.label }}</p>
+              <div class="flex items-center gap-3 text-sm">
+                <span class="text-slate-400">{{ formatDate(selectedTransaction.date) }}</span>
+                <span :class="selectedTransaction.type === 'credit' ? 'text-emerald-400' : 'text-rose-400'">
+                  {{ selectedTransaction.type === 'credit' ? '+' : '' }}{{ formatAmount(selectedTransaction.amount) }}
+                </span>
+              </div>
+              <p class="text-slate-500 text-xs mt-2 font-mono break-all">{{ selectedTransaction.label }}</p>
+            </div>
+
+            <!-- Existing Rules -->
+            <div v-if="getExistingRulesForTransaction(selectedTransaction.label).length > 0" class="mb-6">
+              <p class="text-slate-400 text-sm mb-2">Règles existantes :</p>
+              <div class="space-y-2">
+                <div 
+                  v-for="rule in getExistingRulesForTransaction(selectedTransaction.label)" 
+                  :key="rule.id"
+                  class="flex items-center justify-between bg-slate-800 rounded-lg px-3 py-2"
+                >
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span 
+                      v-for="(kw, idx) in rule.keywords" 
+                      :key="kw"
+                      class="text-cyan-400 text-sm font-medium"
+                    >
+                      {{ kw }}<span v-if="idx < rule.keywords.length - 1" class="text-slate-600 mx-1">+</span>
+                    </span>
+                    <span class="text-slate-500 text-sm mx-2">→</span>
+                    <span class="text-slate-300 text-sm">{{ categories.find(c => c.id === rule.categoryId)?.name }}</span>
+                  </div>
+                  <button 
+                    @click="removeExistingRule(rule.id)"
+                    class="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                  >
+                    <Trash2 class="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Selected Keywords Display -->
+            <div v-if="selectedKeywords.length > 0" class="mb-4">
+              <p class="text-slate-400 text-sm mb-2">Mots-clés sélectionnés :</p>
+              <div class="flex flex-wrap gap-2 bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-3">
+                <div 
+                  v-for="keyword in selectedKeywords" 
+                  :key="keyword"
+                  class="flex items-center gap-1 bg-cyan-500/20 text-cyan-400 rounded-md px-2 py-1"
+                >
+                  <span class="text-sm font-medium">{{ keyword }}</span>
+                  <button 
+                    @click="removeSelectedKeyword(keyword)"
+                    class="p-0.5 rounded hover:bg-cyan-500/30 transition-colors"
+                  >
+                    <X class="w-3 h-3" />
+                  </button>
+                </div>
+                <span v-if="selectedKeywords.length > 1" class="text-slate-500 text-xs self-center ml-2">
+                  (toutes ces conditions doivent être présentes)
+                </span>
+              </div>
+            </div>
+
+            <!-- Keywords Selection -->
+            <div class="mb-6">
+              <p class="text-slate-400 text-sm mb-3">
+                Mots-clés détectés 
+                <span class="text-slate-500">(cliquez pour ajouter/retirer)</span> :
+              </p>
+              <div class="flex flex-wrap gap-2 mb-4">
+                <button
+                  v-for="keyword in extractedKeywords"
+                  :key="keyword"
+                  @click="toggleKeyword(keyword)"
+                  :class="[
+                    'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                    isKeywordSelected(keyword)
+                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 ring-1 ring-cyan-500/50'
+                      : 'bg-slate-800 text-slate-300 border border-slate-700 hover:border-slate-600'
+                  ]"
+                >
+                  <span v-if="isKeywordSelected(keyword)" class="mr-1">✓</span>
+                  {{ keyword }}
+                </button>
+              </div>
+              
+              <!-- Custom keyword -->
+              <div class="flex gap-2">
+                <input
+                  v-model="customKeyword"
+                  type="text"
+                  placeholder="Ajouter un mot-clé personnalisé..."
+                  class="flex-1 h-10 bg-slate-800/50 border border-slate-700 rounded-lg px-4 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors"
+                  @keyup.enter="addCustomKeyword"
+                />
+                <Button 
+                  @click="addCustomKeyword"
+                  :disabled="!customKeyword.trim()"
+                  class="bg-slate-700 hover:bg-slate-600 text-white px-4"
+                >
+                  Ajouter
+                </Button>
+              </div>
+            </div>
+
+            <!-- Category Selection -->
+            <div v-if="selectedKeywords.length > 0">
+              <p class="text-slate-400 text-sm mb-3">
+                Assigner 
+                <span class="text-cyan-400 font-medium">
+                  {{ selectedKeywords.join(' + ') }}
+                </span> 
+                à :
+              </p>
+              <div class="grid grid-cols-3 gap-2">
+                <button
+                  v-for="category in categories"
+                  :key="category.id"
+                  @click="assignCategory(category)"
+                  :class="[
+                    'flex flex-col items-center gap-2 p-3 rounded-xl border transition-all hover:scale-105',
+                    'border-slate-700 hover:border-slate-600 bg-slate-800/30 hover:bg-slate-800/50'
+                  ]"
+                >
+                  <div :class="['w-8 h-8 rounded-lg flex items-center justify-center', getColorClasses(category.color, 'bg-light')]">
+                    <component :is="iconComponents[category.icon] || MoreHorizontal" :class="['w-4 h-4', getColorClasses(category.color, 'text')]" />
+                  </div>
+                  <span class="text-slate-300 text-xs font-medium">{{ category.name }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Help text -->
+            <div v-else class="bg-slate-800/30 rounded-xl p-4 text-center">
+              <Tag class="w-8 h-8 text-slate-600 mx-auto mb-2" />
+              <p class="text-slate-500 text-sm">
+                Sélectionnez un ou plusieurs mots-clés pour les associer à une catégorie
+              </p>
+              <p class="text-slate-600 text-xs mt-1">
+                Utilisez plusieurs mots-clés pour être plus précis (ex: "carrefour" + "paris")
+              </p>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <FloatingDock />
   </div>
 </template>
 
+<style scoped>
+.modal-enter-active,
+.modal-leave-active {
+  transition: all 0.2s ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from .relative,
+.modal-leave-to .relative {
+  transform: scale(0.95);
+}
+</style>

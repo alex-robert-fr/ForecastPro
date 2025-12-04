@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3'
-import { ref, computed, onMounted } from 'vue'
+import { Head, Link } from '@inertiajs/vue3'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
 import { 
@@ -23,9 +23,13 @@ import {
   GraduationCap,
   MoreHorizontal,
   X,
-  Check
+  Check,
+  Tag
 } from 'lucide-vue-next'
 import FloatingDock from '~/components/FloatingDock.vue'
+import { useCategoryRules } from '~/composables/useCategoryRules'
+
+const { categories, initialize, getCategoryForTransaction } = useCategoryRules()
 
 interface Budget {
   id: string
@@ -46,25 +50,55 @@ interface Transaction {
   merchant: string | null
 }
 
-const budgets = ref<Budget[]>([
-  { id: '1', name: 'Alimentation', category: 'food', limit: 400, spent: 0, color: 'amber', icon: 'utensils' },
-  { id: '2', name: 'Transport', category: 'transport', limit: 150, spent: 0, color: 'blue', icon: 'car' },
-  { id: '3', name: 'Shopping', category: 'shopping', limit: 200, spent: 0, color: 'violet', icon: 'shopping' },
-  { id: '4', name: 'Loisirs', category: 'leisure', limit: 100, spent: 0, color: 'pink', icon: 'gamepad' },
-  { id: '5', name: 'Logement', category: 'housing', limit: 800, spent: 0, color: 'emerald', icon: 'home' },
-  { id: '6', name: 'Abonnements', category: 'subscriptions', limit: 50, spent: 0, color: 'cyan', icon: 'smartphone' },
-])
+// Budgets basés sur les catégories du composable
+const budgetLimits = ref<Record<string, number>>({})
+const BUDGET_STORAGE_KEY = 'forecastpro_budget_limits'
+
+// Charger les limites de budget depuis localStorage
+const loadBudgetLimits = () => {
+  if (typeof window === 'undefined') return
+  try {
+    const stored = localStorage.getItem(BUDGET_STORAGE_KEY)
+    if (stored) {
+      budgetLimits.value = JSON.parse(stored)
+    }
+  } catch (error) {
+    console.error('Erreur lors du chargement des limites:', error)
+  }
+}
+
+// Sauvegarder les limites
+const saveBudgetLimits = () => {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(budgetLimits.value))
+  } catch (error) {
+    console.error('Erreur lors de la sauvegarde des limites:', error)
+  }
+}
+
+// Budgets calculés à partir des catégories et des limites
+const budgets = computed(() => {
+  return categories.value
+    .filter(cat => cat.id !== 'income') // Exclure les revenus
+    .map(cat => ({
+      id: cat.id,
+      name: cat.name,
+      category: cat.id,
+      limit: budgetLimits.value[cat.id] || 0,
+      spent: spentByCategory.value[cat.id] || 0,
+      color: cat.color,
+      icon: cat.icon
+    }))
+    .filter(b => b.limit > 0 || b.spent > 0) // Afficher seulement si limite définie ou dépenses
+})
 
 const transactions = ref<Transaction[]>([])
+const spentByCategory = ref<Record<string, number>>({})
 const isModalOpen = ref(false)
 const editingBudget = ref<Budget | null>(null)
-const newBudget = ref({
-  name: '',
-  category: '',
-  limit: 0,
-  color: 'emerald',
-  icon: 'utensils'
-})
+const selectedCategoryId = ref('')
+const newLimit = ref(0)
 
 const availableColors = [
   { name: 'emerald', class: 'bg-emerald-500' },
@@ -143,40 +177,9 @@ const totalRemaining = computed(() => totalBudget.value - totalSpent.value)
 const budgetsExceeded = computed(() => budgets.value.filter(b => getStatus(b) === 'exceeded').length)
 const budgetsWarning = computed(() => budgets.value.filter(b => getStatus(b) === 'warning').length)
 
-// Catégorisation des transactions
-const categorizeTransaction = (label: string): string => {
-  const lowerLabel = label.toLowerCase()
-  
-  // Alimentation
-  if (/carrefour|leclerc|auchan|lidl|intermarche|monoprix|franprix|picard|boulangerie|restaurant|mcdo|burger|pizza|sushi|uber eats|deliveroo/i.test(lowerLabel)) {
-    return 'food'
-  }
-  // Transport
-  if (/sncf|ratp|uber|bolt|taxi|essence|total|shell|bp|parking|autoroute|peage/i.test(lowerLabel)) {
-    return 'transport'
-  }
-  // Shopping
-  if (/amazon|fnac|darty|zara|h&m|decathlon|ikea|leroy merlin|castorama/i.test(lowerLabel)) {
-    return 'shopping'
-  }
-  // Logement
-  if (/loyer|edf|engie|eau|assurance habitation|syndic/i.test(lowerLabel)) {
-    return 'housing'
-  }
-  // Abonnements
-  if (/netflix|spotify|amazon prime|canal|orange|sfr|bouygues|free|deezer|apple/i.test(lowerLabel)) {
-    return 'subscriptions'
-  }
-  // Loisirs
-  if (/cinema|theatre|concert|musee|sport|gym|fitness/i.test(lowerLabel)) {
-    return 'leisure'
-  }
-  
-  return 'other'
-}
-
+// Calculer les dépenses par catégorie en utilisant les règles
 const calculateSpentAmounts = () => {
-  const spentByCategory: Record<string, number> = {}
+  const spent: Record<string, number> = {}
   
   // Calculer les dépenses du mois en cours
   const now = new Date()
@@ -188,16 +191,39 @@ const calculateSpentAmounts = () => {
   })
   
   currentMonthTransactions.forEach(t => {
-    const category = categorizeTransaction(t.label)
-    spentByCategory[category] = (spentByCategory[category] || 0) + Math.abs(t.amount)
+    const category = getCategoryForTransaction(t.label)
+    if (category) {
+      spent[category.id] = (spent[category.id] || 0) + Math.abs(t.amount)
+    }
   })
   
-  // Mettre à jour les budgets
-  budgets.value = budgets.value.map(budget => ({
-    ...budget,
-    spent: spentByCategory[budget.category] || 0
-  }))
+  spentByCategory.value = spent
 }
+
+// Nombre de transactions non catégorisées
+const uncategorizedCount = computed(() => {
+  const now = new Date()
+  return transactions.value.filter(t => {
+    const date = new Date(t.date)
+    return date.getMonth() === now.getMonth() && 
+           date.getFullYear() === now.getFullYear() &&
+           t.type === 'debit' &&
+           !getCategoryForTransaction(t.label)
+  }).length
+})
+
+const uncategorizedAmount = computed(() => {
+  const now = new Date()
+  return transactions.value
+    .filter(t => {
+      const date = new Date(t.date)
+      return date.getMonth() === now.getMonth() && 
+             date.getFullYear() === now.getFullYear() &&
+             t.type === 'debit' &&
+             !getCategoryForTransaction(t.label)
+    })
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+})
 
 const loadTransactions = async () => {
   if (typeof window === 'undefined') return
@@ -215,10 +241,12 @@ const loadTransactions = async () => {
 const openModal = (budget?: Budget) => {
   if (budget) {
     editingBudget.value = budget
-    newBudget.value = { ...budget }
+    selectedCategoryId.value = budget.category
+    newLimit.value = budget.limit
   } else {
     editingBudget.value = null
-    newBudget.value = { name: '', category: '', limit: 0, color: 'emerald', icon: 'utensils' }
+    selectedCategoryId.value = ''
+    newLimit.value = 0
   }
   isModalOpen.value = true
 }
@@ -226,49 +254,43 @@ const openModal = (budget?: Budget) => {
 const closeModal = () => {
   isModalOpen.value = false
   editingBudget.value = null
-  newBudget.value = { name: '', category: '', limit: 0, color: 'emerald', icon: 'utensils' }
+  selectedCategoryId.value = ''
+  newLimit.value = 0
 }
 
 const saveBudget = () => {
-  if (!newBudget.value.name || newBudget.value.limit <= 0) return
+  const categoryId = editingBudget.value?.category || selectedCategoryId.value
+  if (!categoryId || newLimit.value < 0) return
   
-  if (editingBudget.value) {
-    // Mise à jour
-    const index = budgets.value.findIndex(b => b.id === editingBudget.value!.id)
-    if (index !== -1) {
-      budgets.value[index] = {
-        ...budgets.value[index],
-        name: newBudget.value.name,
-        category: newBudget.value.category || newBudget.value.name.toLowerCase(),
-        limit: newBudget.value.limit,
-        color: newBudget.value.color,
-        icon: newBudget.value.icon,
-      }
-    }
-  } else {
-    // Création
-    budgets.value.push({
-      id: Date.now().toString(),
-      name: newBudget.value.name,
-      category: newBudget.value.category || newBudget.value.name.toLowerCase(),
-      limit: newBudget.value.limit,
-      spent: 0,
-      color: newBudget.value.color,
-      icon: newBudget.value.icon,
-    })
-  }
+  budgetLimits.value[categoryId] = newLimit.value
+  saveBudgetLimits()
   
   closeModal()
-  calculateSpentAmounts()
 }
 
 const deleteBudget = (id: string) => {
-  budgets.value = budgets.value.filter(b => b.id !== id)
+  delete budgetLimits.value[id]
+  saveBudgetLimits()
 }
 
+// Catégories disponibles pour ajouter un budget (celles qui n'ont pas encore de limite)
+const availableCategoriesForBudget = computed(() => {
+  return categories.value.filter(cat => 
+    cat.id !== 'income' && 
+    !budgetLimits.value[cat.id]
+  )
+})
+
 onMounted(() => {
+  initialize()
+  loadBudgetLimits()
   loadTransactions()
 })
+
+// Recalculer quand les catégories changent
+watch(categories, () => {
+  calculateSpentAmounts()
+}, { deep: true })
 </script>
 
 <template>
@@ -278,7 +300,7 @@ onMounted(() => {
     <!-- Header -->
     <header class="bg-slate-900/30 backdrop-blur-sm border-slate-800/50 border-b">
       <div class="mx-auto px-6 py-4 max-w-7xl">
-        <div class="flex items-center justify-between">
+        <div class="flex justify-between items-center">
           <div class="flex items-center gap-3">
             <div class="flex justify-center items-center rounded-xl w-10 h-10" style="background: linear-gradient(135deg, #34d399 0%, #06b6d4 100%);">
               <span class="font-bold text-slate-950 text-lg">F</span>
@@ -290,9 +312,9 @@ onMounted(() => {
           </div>
           <Button 
             @click="openModal()"
-            class="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-medium"
+            class="bg-cyan-500 hover:bg-cyan-600 font-medium text-slate-950"
           >
-            <Plus class="w-4 h-4 mr-2" />
+            <Plus class="mr-2 w-4 h-4" />
             Nouveau budget
           </Button>
         </div>
@@ -300,12 +322,35 @@ onMounted(() => {
     </header>
 
     <main class="space-y-6 mx-auto py-8 pr-6 pl-20 max-w-7xl">
+      <!-- Uncategorized Warning -->
+      <Card v-if="uncategorizedCount > 0" class="bg-amber-500/5 border-amber-500/20">
+        <CardContent class="py-4">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-3">
+              <div class="flex justify-center items-center bg-amber-500/10 rounded-xl w-10 h-10">
+                <Tag class="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <p class="font-medium text-amber-300">{{ uncategorizedCount }} transaction{{ uncategorizedCount > 1 ? 's' : '' }} non catégorisée{{ uncategorizedCount > 1 ? 's' : '' }}</p>
+                <p class="text-slate-400 text-sm">{{ formatAmount(uncategorizedAmount) }} de dépenses ne sont pas comptabilisées dans vos budgets du mois</p>
+              </div>
+            </div>
+            <Link 
+              href="/transactions?filter=uncategorized"
+              class="bg-amber-500/20 hover:bg-amber-500/30 px-4 py-2 rounded-lg font-medium text-amber-400 text-sm transition-colors"
+            >
+              Catégoriser
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+
       <!-- Stats Overview -->
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="gap-4 grid grid-cols-1 md:grid-cols-4">
         <Card class="bg-slate-900/50 backdrop-blur border-slate-800/50">
           <CardContent class="pt-5 pb-5">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+              <div class="flex justify-center items-center bg-cyan-500/10 rounded-xl w-10 h-10">
                 <PieChart class="w-5 h-5 text-cyan-400" />
               </div>
               <div>
@@ -319,7 +364,7 @@ onMounted(() => {
         <Card class="bg-slate-900/50 backdrop-blur border-slate-800/50">
           <CardContent class="pt-5 pb-5">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center">
+              <div class="flex justify-center items-center bg-rose-500/10 rounded-xl w-10 h-10">
                 <TrendingDown class="w-5 h-5 text-rose-400" />
               </div>
               <div>
@@ -333,7 +378,7 @@ onMounted(() => {
         <Card class="bg-slate-900/50 backdrop-blur border-slate-800/50">
           <CardContent class="pt-5 pb-5">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+              <div class="flex justify-center items-center bg-emerald-500/10 rounded-xl w-10 h-10">
                 <TrendingUp class="w-5 h-5 text-emerald-400" />
               </div>
               <div>
@@ -347,7 +392,7 @@ onMounted(() => {
         <Card class="bg-slate-900/50 backdrop-blur border-slate-800/50">
           <CardContent class="pt-5 pb-5">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+              <div class="flex justify-center items-center bg-amber-500/10 rounded-xl w-10 h-10">
                 <AlertTriangle class="w-5 h-5 text-amber-400" />
               </div>
               <div>
@@ -364,7 +409,7 @@ onMounted(() => {
       </div>
 
       <!-- Budget Cards Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="gap-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         <Card 
           v-for="budget in budgets" 
           :key="budget.id"
@@ -375,7 +420,7 @@ onMounted(() => {
           ]"
         >
           <CardContent class="pt-5">
-            <div class="flex items-start justify-between mb-4">
+            <div class="flex justify-between items-start mb-4">
               <div class="flex items-center gap-3">
                 <div :class="['w-10 h-10 rounded-xl flex items-center justify-center', getColorClasses(budget.color, 'bg-light')]">
                   <component :is="iconComponents[budget.icon]" :class="['w-5 h-5', getColorClasses(budget.color, 'text')]" />
@@ -388,13 +433,13 @@ onMounted(() => {
               <div class="flex items-center gap-1">
                 <button 
                   @click="openModal(budget)"
-                  class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
+                  class="hover:bg-slate-800 p-1.5 rounded-lg text-slate-500 hover:text-white transition-colors"
                 >
                   <Pencil class="w-4 h-4" />
                 </button>
                 <button 
                   @click="deleteBudget(budget.id)"
-                  class="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                  class="hover:bg-rose-500/10 p-1.5 rounded-lg text-slate-500 hover:text-rose-400 transition-colors"
                 >
                   <Trash2 class="w-4 h-4" />
                 </button>
@@ -403,7 +448,7 @@ onMounted(() => {
 
             <!-- Progress Bar -->
             <div class="space-y-2">
-              <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div class="bg-slate-800 rounded-full h-2 overflow-hidden">
                 <div 
                   :class="[
                     'h-full rounded-full transition-all duration-500',
@@ -414,7 +459,7 @@ onMounted(() => {
                   :style="{ width: `${getPercentage(budget)}%` }"
                 />
               </div>
-              <div class="flex items-center justify-between text-xs">
+              <div class="flex justify-between items-center text-xs">
                 <span :class="[
                   getStatus(budget) === 'exceeded' ? 'text-rose-400' : 
                   getStatus(budget) === 'warning' ? 'text-amber-400' : 
@@ -429,7 +474,7 @@ onMounted(() => {
             </div>
 
             <!-- Status Badge -->
-            <div class="mt-4 pt-4 border-t border-slate-800/50">
+            <div class="mt-4 pt-4 border-slate-800/50 border-t">
               <div v-if="getStatus(budget) === 'exceeded'" class="flex items-center gap-2 text-rose-400 text-sm">
                 <AlertTriangle class="w-4 h-4" />
                 <span>Budget dépassé de {{ formatAmount(budget.spent - budget.limit) }}</span>
@@ -449,14 +494,14 @@ onMounted(() => {
         <!-- Add New Budget Card -->
         <Card 
           @click="openModal()"
-          class="bg-slate-900/30 border-slate-800/50 border-dashed cursor-pointer hover:border-cyan-500/50 hover:bg-slate-900/50 transition-all group"
+          class="group bg-slate-900/30 hover:bg-slate-900/50 border-slate-800/50 hover:border-cyan-500/50 border-dashed transition-all cursor-pointer"
         >
-          <CardContent class="pt-5 h-full flex flex-col items-center justify-center min-h-[200px]">
-            <div class="w-12 h-12 rounded-xl bg-slate-800/50 group-hover:bg-cyan-500/10 flex items-center justify-center mb-3 transition-colors">
+          <CardContent class="flex flex-col justify-center items-center pt-5 h-full min-h-[200px]">
+            <div class="flex justify-center items-center bg-slate-800/50 group-hover:bg-cyan-500/10 mb-3 rounded-xl w-12 h-12 transition-colors">
               <Plus class="w-6 h-6 text-slate-500 group-hover:text-cyan-400 transition-colors" />
             </div>
-            <p class="text-slate-500 group-hover:text-slate-300 font-medium transition-colors">Ajouter un budget</p>
-            <p class="text-slate-600 text-sm mt-1">Définir une nouvelle catégorie</p>
+            <p class="font-medium text-slate-500 group-hover:text-slate-300 transition-colors">Ajouter un budget</p>
+            <p class="mt-1 text-slate-600 text-sm">Définir une nouvelle catégorie</p>
           </CardContent>
         </Card>
       </div>
@@ -464,7 +509,7 @@ onMounted(() => {
       <!-- Monthly Overview Chart -->
       <Card class="bg-slate-900/50 backdrop-blur border-slate-800/50">
         <CardHeader>
-          <CardTitle class="text-white flex items-center gap-2 text-base">
+          <CardTitle class="flex items-center gap-2 text-white text-base">
             <PieChart class="w-5 h-5 text-cyan-400" />
             Répartition du budget mensuel
           </CardTitle>
@@ -473,14 +518,14 @@ onMounted(() => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div class="gap-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
             <div 
               v-for="budget in budgets" 
               :key="budget.id"
               class="text-center"
             >
-              <div class="relative w-20 h-20 mx-auto mb-2">
-                <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+              <div class="relative mx-auto mb-2 w-20 h-20">
+                <svg class="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
                   <circle
                     cx="50"
                     cy="50"
@@ -502,11 +547,11 @@ onMounted(() => {
                     :class="getColorClasses(budget.color, 'text')"
                   />
                 </svg>
-                <div class="absolute inset-0 flex items-center justify-center">
-                  <span class="text-white font-semibold text-sm">{{ getPercentage(budget).toFixed(0) }}%</span>
+                <div class="absolute inset-0 flex justify-center items-center">
+                  <span class="font-semibold text-white text-sm">{{ getPercentage(budget).toFixed(0) }}%</span>
                 </div>
               </div>
-              <p class="text-slate-300 text-sm font-medium">{{ budget.name }}</p>
+              <p class="font-medium text-slate-300 text-sm">{{ budget.name }}</p>
               <p class="text-slate-500 text-xs">{{ formatAmount(budget.spent) }}</p>
             </div>
           </div>
@@ -519,7 +564,7 @@ onMounted(() => {
       <Transition name="modal">
         <div 
           v-if="isModalOpen" 
-          class="fixed inset-0 z-50 flex items-center justify-center p-4"
+          class="z-50 fixed inset-0 flex justify-center items-center p-4"
         >
           <!-- Backdrop -->
           <div 
@@ -528,81 +573,70 @@ onMounted(() => {
           />
           
           <!-- Modal Content -->
-          <div class="relative bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-            <div class="flex items-center justify-between mb-6">
-              <h2 class="text-white text-lg font-semibold">
+          <div class="relative bg-slate-900 shadow-2xl p-6 border border-slate-800 rounded-2xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="font-semibold text-white text-lg">
                 {{ editingBudget ? 'Modifier le budget' : 'Nouveau budget' }}
               </h2>
               <button 
                 @click="closeModal"
-                class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
+                class="hover:bg-slate-800 p-1.5 rounded-lg text-slate-500 hover:text-white transition-colors"
               >
                 <X class="w-5 h-5" />
               </button>
             </div>
 
             <div class="space-y-4">
-              <!-- Name -->
-              <div>
-                <label class="block text-slate-400 text-sm mb-2">Nom du budget</label>
-                <input
-                  v-model="newBudget.name"
-                  type="text"
-                  placeholder="Ex: Alimentation"
-                  class="w-full h-10 bg-slate-800/50 border border-slate-700 rounded-lg px-4 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors"
-                />
+              <!-- Category Selection (only for new budget) -->
+              <div v-if="!editingBudget">
+                <label class="block mb-2 text-slate-400 text-sm">Catégorie</label>
+                <div class="gap-2 grid grid-cols-2">
+                  <button
+                    v-for="cat in availableCategoriesForBudget"
+                    :key="cat.id"
+                    @click="selectedCategoryId = cat.id"
+                    :class="[
+                      'flex items-center gap-2 p-3 rounded-lg border transition-all text-left',
+                      selectedCategoryId === cat.id 
+                        ? 'border-cyan-500 bg-cyan-500/10' 
+                        : 'border-slate-700 hover:border-slate-600'
+                    ]"
+                  >
+                    <div :class="['w-8 h-8 rounded-lg flex items-center justify-center', getColorClasses(cat.color, 'bg-light')]">
+                      <component :is="iconComponents[cat.icon] || MoreHorizontal" :class="['w-4 h-4', getColorClasses(cat.color, 'text')]" />
+                    </div>
+                    <span :class="selectedCategoryId === cat.id ? 'text-white' : 'text-slate-300'" class="font-medium text-sm">{{ cat.name }}</span>
+                  </button>
+                </div>
+                <p v-if="availableCategoriesForBudget.length === 0" class="py-4 text-slate-500 text-sm text-center">
+                  Toutes les catégories ont déjà un budget défini
+                </p>
+              </div>
+
+              <!-- Category info (for editing) -->
+              <div v-else class="bg-slate-800/50 p-4 rounded-xl">
+                <div class="flex items-center gap-3">
+                  <div :class="['w-10 h-10 rounded-lg flex items-center justify-center', getColorClasses(editingBudget.color, 'bg-light')]">
+                    <component :is="iconComponents[editingBudget.icon] || MoreHorizontal" :class="['w-5 h-5', getColorClasses(editingBudget.color, 'text')]" />
+                  </div>
+                  <div>
+                    <p class="font-medium text-white">{{ editingBudget.name }}</p>
+                    <p class="text-slate-500 text-xs">Dépensé ce mois : {{ formatAmount(editingBudget.spent) }}</p>
+                  </div>
+                </div>
               </div>
 
               <!-- Limit -->
               <div>
-                <label class="block text-slate-400 text-sm mb-2">Limite mensuelle (€)</label>
+                <label class="block mb-2 text-slate-400 text-sm">Limite mensuelle (€)</label>
                 <input
-                  v-model.number="newBudget.limit"
+                  v-model.number="newLimit"
                   type="number"
                   min="0"
                   step="10"
                   placeholder="400"
-                  class="w-full h-10 bg-slate-800/50 border border-slate-700 rounded-lg px-4 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-colors"
+                  class="bg-slate-800/50 px-4 border border-slate-700 focus:border-cyan-500/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500/50 w-full h-10 text-white transition-colors placeholder-slate-500"
                 />
-              </div>
-
-              <!-- Icon Selection -->
-              <div>
-                <label class="block text-slate-400 text-sm mb-2">Icône</label>
-                <div class="grid grid-cols-5 gap-2">
-                  <button
-                    v-for="icon in availableIcons"
-                    :key="icon.name"
-                    @click="newBudget.icon = icon.name"
-                    :class="[
-                      'p-2.5 rounded-lg border transition-all',
-                      newBudget.icon === icon.name 
-                        ? 'border-cyan-500 bg-cyan-500/10 text-cyan-400' 
-                        : 'border-slate-700 text-slate-500 hover:text-white hover:border-slate-600'
-                    ]"
-                  >
-                    <component :is="iconComponents[icon.name]" class="w-5 h-5 mx-auto" />
-                  </button>
-                </div>
-              </div>
-
-              <!-- Color Selection -->
-              <div>
-                <label class="block text-slate-400 text-sm mb-2">Couleur</label>
-                <div class="flex gap-2">
-                  <button
-                    v-for="color in availableColors"
-                    :key="color.name"
-                    @click="newBudget.color = color.name"
-                    :class="[
-                      'w-8 h-8 rounded-full transition-all',
-                      color.class,
-                      newBudget.color === color.name 
-                        ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' 
-                        : 'opacity-50 hover:opacity-100'
-                    ]"
-                  />
-                </div>
               </div>
             </div>
 
@@ -611,16 +645,16 @@ onMounted(() => {
               <Button 
                 @click="closeModal"
                 variant="outline"
-                class="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800"
+                class="flex-1 hover:bg-slate-800 border-slate-700 text-slate-300"
               >
                 Annuler
               </Button>
               <Button 
                 @click="saveBudget"
-                class="flex-1 bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-medium"
-                :disabled="!newBudget.name || newBudget.limit <= 0"
+                class="flex-1 bg-cyan-500 hover:bg-cyan-600 font-medium text-slate-950"
+                :disabled="(!editingBudget && !selectedCategoryId) || newLimit <= 0"
               >
-                <Check class="w-4 h-4 mr-2" />
+                <Check class="mr-2 w-4 h-4" />
                 {{ editingBudget ? 'Enregistrer' : 'Créer' }}
               </Button>
             </div>

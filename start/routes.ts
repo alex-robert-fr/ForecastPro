@@ -15,6 +15,7 @@ const SettingsController = () => import('#controllers/settings_controller')
 // Pages
 router.on('/').renderInertia('home')
 router.on('/transactions').renderInertia('transactions')
+router.on('/budgets').renderInertia('budgets')
 router.get('/settings', [SettingsController, 'show'])
 
 // API

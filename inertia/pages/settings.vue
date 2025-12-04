@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { Button } from '~/components/ui/button'
 import { Settings, Wallet, CheckCircle2, AlertCircle, Loader2 } from 'lucide-vue-next'
 import FloatingDock from '~/components/FloatingDock.vue'
+import BankConnection from '~/components/BankConnection.vue'
 
 interface Account {
   id: number
@@ -190,6 +191,9 @@ const handleSubmit = async () => {
           </form>
         </CardContent>
       </Card>
+
+      <!-- Bank Connection Card -->
+      <BankConnection />
 
       <!-- Account Info Card -->
       <Card v-if="account" class="bg-slate-900/50 backdrop-blur border-slate-800/50 overflow-hidden">

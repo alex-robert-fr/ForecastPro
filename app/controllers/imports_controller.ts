@@ -86,17 +86,23 @@ export default class ImportsController {
       batch.status = 'completed'
       await batch.save()
 
-      // Recalculer le solde du compte = solde initial + somme des transactions
-      const totalResult = await Transaction.query()
+      // Recalculer le solde du compte = solde initial + crédits - débits
+      const creditsResult = await Transaction.query()
         .where('accountId', account.id)
+        .where('type', 'credit')
         .sum('amount as total')
         .first()
 
-      if (totalResult) {
-        const transactionsTotal = Number(totalResult.$extras.total) || 0
-        account.balance = (account.initialBalance || 0) + transactionsTotal
-        await account.save()
-      }
+      const debitsResult = await Transaction.query()
+        .where('accountId', account.id)
+        .where('type', 'debit')
+        .sum('amount as total')
+        .first()
+
+      const credits = Number(creditsResult?.$extras?.total || 0)
+      const debits = Number(debitsResult?.$extras?.total || 0)
+      account.balance = (account.initialBalance || 0) + credits - debits
+      await account.save()
 
       return response.ok({
         success: true,

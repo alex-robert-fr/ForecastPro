@@ -86,14 +86,15 @@ export default class ImportsController {
       batch.status = 'completed'
       await batch.save()
 
-      // Recalculer le solde du compte
+      // Recalculer le solde du compte = solde initial + somme des transactions
       const totalResult = await Transaction.query()
         .where('accountId', account.id)
         .sum('amount as total')
         .first()
 
       if (totalResult) {
-        account.balance = Number(totalResult.$extras.total) || 0
+        const transactionsTotal = Number(totalResult.$extras.total) || 0
+        account.balance = (account.initialBalance || 0) + transactionsTotal
         await account.save()
       }
 

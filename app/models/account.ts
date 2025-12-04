@@ -21,6 +21,9 @@ export default class Account extends BaseModel {
   declare balance: number
 
   @column()
+  declare initialBalance: number
+
+  @column()
   declare currency: string
 
   @column()

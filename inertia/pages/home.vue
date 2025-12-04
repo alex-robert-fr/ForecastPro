@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3'
+import { Head, Link } from '@inertiajs/vue3'
 import { ref, computed, onMounted } from 'vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
-import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Loader2 } from 'lucide-vue-next'
+import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Loader2, Settings } from 'lucide-vue-next'
 
 interface Transaction {
   id: number
@@ -171,14 +171,23 @@ onMounted(() => {
     <!-- Header -->
     <header class="bg-slate-900/30 backdrop-blur-sm border-slate-800/50 border-b">
       <div class="mx-auto px-6 py-4 max-w-7xl">
-        <div class="flex items-center gap-3">
-          <div class="flex justify-center items-center bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-xl w-10 h-10">
-            <span class="font-bold text-slate-950 text-lg">F</span>
+        <div class="flex justify-between items-center">
+          <div class="flex items-center gap-3">
+            <div class="flex justify-center items-center bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-xl w-10 h-10">
+              <span class="font-bold text-slate-950 text-lg">F</span>
+            </div>
+            <div>
+              <h1 class="font-semibold text-white text-xl tracking-tight">ForecastPro</h1>
+              <p class="text-slate-500 text-xs">Gestion financière intelligente</p>
+            </div>
           </div>
-          <div>
-            <h1 class="font-semibold text-white text-xl tracking-tight">ForecastPro</h1>
-            <p class="text-slate-500 text-xs">Gestion financière intelligente</p>
-          </div>
+          <Link 
+            href="/settings" 
+            class="flex items-center gap-2 bg-slate-800/50 hover:bg-slate-700/50 px-4 py-2 rounded-lg text-slate-300 hover:text-white transition-colors"
+          >
+            <Settings class="w-4 h-4" />
+            <span class="text-sm">Paramètres</span>
+          </Link>
         </div>
       </div>
     </header>

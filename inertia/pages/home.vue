@@ -167,7 +167,7 @@ onMounted(() => {
 <template>
   <Head title="ForecastPro - Dashboard" />
 
-  <div class="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 min-h-screen">
+  <div class="bg-slate-950 min-h-screen">
     <!-- Header -->
     <header class="bg-slate-900/30 backdrop-blur-sm border-slate-800/50 border-b">
       <div class="mx-auto px-6 py-4 max-w-7xl">
@@ -306,7 +306,7 @@ onMounted(() => {
       </Card>
 
       <!-- Transactions List -->
-      <Card v-if="transactions.length > 0" class="bg-slate-900/50 backdrop-blur border-slate-800/50">
+      <Card v-if="transactions.length > 0" class="bg-slate-900/50 backdrop-blur border-slate-800/50 overflow-hidden">
         <CardHeader>
           <CardTitle class="text-white">Transactions récentes</CardTitle>
           <CardDescription class="text-slate-400">
@@ -318,25 +318,25 @@ onMounted(() => {
             <div
               v-for="transaction in transactions"
               :key="transaction.id"
-              class="flex justify-between items-center bg-slate-800/30 hover:bg-slate-800/50 p-4 rounded-lg transition-colors"
+              class="flex justify-between items-center gap-4 bg-slate-800/30 hover:bg-slate-800/50 p-4 rounded-lg transition-colors"
             >
-              <div class="flex items-center gap-4">
+              <div class="flex flex-1 items-center gap-4 min-w-0">
                 <div
                   :class="[
-                    'w-10 h-10 rounded-full flex items-center justify-center',
+                    'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
                     transaction.type === 'credit' ? 'bg-emerald-500/10' : 'bg-rose-500/10',
                   ]"
                 >
                   <TrendingUp v-if="transaction.type === 'credit'" class="w-5 h-5 text-emerald-400" />
                   <TrendingDown v-else class="w-5 h-5 text-rose-400" />
                 </div>
-                <div>
-                  <p class="max-w-md font-medium text-white truncate">
+                <div class="flex-1 min-w-0">
+                  <p class="font-medium text-white truncate">
                     {{ transaction.merchant || transaction.label.substring(0, 50) }}
                   </p>
                   <div class="flex items-center gap-2 mt-0.5">
                     <span class="text-slate-500 text-xs">{{ formatDate(transaction.date) }}</span>
-                    <span v-if="transaction.paymentMethod" class="bg-slate-700/50 px-2 py-0.5 rounded-full text-slate-400 text-xs">
+                    <span v-if="transaction.paymentMethod" class="bg-slate-700/50 px-2 py-0.5 rounded-full text-slate-400 text-xs whitespace-nowrap">
                       {{ transaction.paymentMethod }}
                     </span>
                   </div>
@@ -344,7 +344,7 @@ onMounted(() => {
               </div>
               <p
                 :class="[
-                  'font-semibold tabular-nums',
+                  'font-semibold tabular-nums whitespace-nowrap shrink-0',
                   transaction.type === 'credit' ? 'text-emerald-400' : 'text-rose-400',
                 ]"
               >

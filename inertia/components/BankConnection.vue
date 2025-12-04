@@ -211,15 +211,48 @@ const syncTransactions = async (accountId?: string) => {
 }
 
 // Déconnecter
-const disconnect = () => {
-  localStorage.removeItem('tink_access_token')
-  localStorage.removeItem('tink_accounts')
-  localStorage.removeItem('tink_user_id')
-  userAccessToken.value = null
-  accounts.value = []
-  isConnected.value = false
-  authUrl.value = null
-  successMessage.value = 'Compte déconnecté'
+const disconnect = async () => {
+  if (!confirm('Êtes-vous sûr de vouloir déconnecter votre compte bancaire ?\n\n⚠️ Toutes les transactions importées seront supprimées et le solde sera remis à zéro.')) {
+    return
+  }
+
+  isLoading.value = true
+  error.value = null
+  successMessage.value = null
+
+  try {
+    // Appeler l'API pour supprimer les transactions côté serveur
+    const response = await fetch('/api/bank-connections/disconnect', {
+      method: 'DELETE',
+      headers: {
+        'X-XSRF-TOKEN': getCsrfToken(),
+      },
+    })
+
+    const data = await response.json()
+
+    if (response.ok && data.success) {
+      // Supprimer les données locales
+      localStorage.removeItem('tink_access_token')
+      localStorage.removeItem('tink_accounts')
+      localStorage.removeItem('tink_user_id')
+
+      // Réinitialiser l'état
+      userAccessToken.value = null
+      accounts.value = []
+      isConnected.value = false
+      authUrl.value = null
+      syncedTransactions.value = null
+
+      successMessage.value = `✅ Compte déconnecté ! ${data.deletedTransactions || 0} transactions supprimées.`
+    } else {
+      error.value = data.error || 'Erreur lors de la déconnexion'
+    }
+  } catch (e) {
+    error.value = 'Erreur de connexion au serveur'
+  } finally {
+    isLoading.value = false
+  }
 }
 
 // Vérifier les paramètres URL et l'état local au chargement
@@ -244,9 +277,20 @@ onMounted(async () => {
   const storedAccounts = localStorage.getItem('tink_accounts')
 
   if (storedToken && storedAccounts) {
-    userAccessToken.value = storedToken
-    accounts.value = JSON.parse(storedAccounts)
-    isConnected.value = true
+    try {
+      const parsedAccounts = JSON.parse(storedAccounts)
+      if (Array.isArray(parsedAccounts) && parsedAccounts.length > 0) {
+        userAccessToken.value = storedToken
+        accounts.value = parsedAccounts
+        isConnected.value = true
+        console.log('🔄 Session Tink restaurée:', parsedAccounts.length, 'compte(s)')
+      }
+    } catch (e) {
+      // Données corrompues, nettoyer
+      localStorage.removeItem('tink_access_token')
+      localStorage.removeItem('tink_accounts')
+      console.log('🧹 Données Tink corrompues, nettoyage effectué')
+    }
   }
 })
 </script>
@@ -358,6 +402,9 @@ onMounted(async () => {
           </a>
           <p class="mt-3 text-slate-500 text-xs">
             Vous serez redirigé vers le portail sécurisé Tink pour sélectionner votre banque et vous authentifier.
+          </p>
+          <p class="mt-2 text-amber-400/80 text-xs">
+            💡 <strong>Astuce :</strong> Si Tink réutilise vos anciens identifiants, ouvrez le lien dans une fenêtre de navigation privée (Ctrl+Shift+N).
           </p>
         </div>
 

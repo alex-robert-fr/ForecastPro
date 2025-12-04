@@ -131,10 +131,61 @@ export default class BankConnectionsController {
   }
 
   /**
-   * Supprime une connexion
+   * Supprime une connexion et toutes les transactions associées
    * DELETE /api/bank-connections/:id
    */
-  async destroy({ params, response }: HttpContext) {
-    return response.json({ success: true, message: `Connexion ${params.id} supprimée` })
+  async destroy({ response }: HttpContext) {
+    try {
+      const Account = (await import('#models/account')).default
+      const Transaction = (await import('#models/transaction')).default
+      const ImportBatch = (await import('#models/import_batch')).default
+
+      // Récupérer le compte par défaut
+      const account = await Account.query().where('isDefault', true).first()
+
+      if (account) {
+        // Supprimer toutes les transactions du compte
+        const deletedCount = await Transaction.query()
+          .where('accountId', account.id)
+          .delete()
+
+        // Supprimer tous les batches d'import
+        await ImportBatch.query()
+          .where('accountId', account.id)
+          .delete()
+
+        // Remettre le solde au solde initial (s'assurer que c'est un nombre valide)
+        const initialBalance = parseFloat(String(account.initialBalance)) || 0
+        account.balance = isNaN(initialBalance) ? 0 : initialBalance
+        
+        // Réinitialiser les infos du compte bancaire (venant de Tink)
+        account.bank = null
+        account.accountNumber = null
+        account.name = 'Compte Principal'
+        
+        await account.save()
+
+        console.log(`🗑️ Déconnexion: ${deletedCount} transactions supprimées, compte réinitialisé`)
+
+        return response.json({
+          success: true,
+          message: `${deletedCount} transactions supprimées, compte réinitialisé`,
+          deletedTransactions: deletedCount,
+          newBalance: account.balance,
+        })
+      }
+
+      return response.json({
+        success: true,
+        message: 'Aucun compte à déconnecter',
+      })
+    } catch (error) {
+      console.error('❌ Erreur déconnexion:', error)
+      return response.status(500).json({
+        success: false,
+        error: 'Erreur lors de la déconnexion',
+        message: error.message,
+      })
+    }
   }
 }

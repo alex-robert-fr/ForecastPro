@@ -99,9 +99,13 @@ export default class ImportsController {
         .sum('amount as total')
         .first()
 
-      const credits = Number(creditsResult?.$extras?.total || 0)
-      const debits = Number(debitsResult?.$extras?.total || 0)
-      account.balance = (account.initialBalance || 0) + credits - debits
+      // S'assurer que les valeurs sont des nombres valides
+      const credits = parseFloat(creditsResult?.$extras?.total) || 0
+      const debits = parseFloat(debitsResult?.$extras?.total) || 0
+      const initialBalance = parseFloat(String(account.initialBalance)) || 0
+      
+      const newBalance = initialBalance + credits - debits
+      account.balance = isNaN(newBalance) ? initialBalance : newBalance
       await account.save()
 
       return response.ok({
@@ -126,7 +130,7 @@ export default class ImportsController {
   }
 
   /**
-   * Liste les transactions récentes
+   * Liste les transactions récentes avec solde calculé dynamiquement
    */
   async index({ response }: HttpContext) {
     const transactions = await Transaction.query()
@@ -136,9 +140,46 @@ export default class ImportsController {
 
     const account = await Account.query().where('isDefault', true).first()
 
+    // Calculer le solde dynamiquement à partir des transactions
+    let calculatedBalance = 0
+    
+    if (account) {
+      const creditsResult = await Transaction.query()
+        .where('accountId', account.id)
+        .where('type', 'credit')
+        .sum('amount as total')
+        .first()
+
+      const debitsResult = await Transaction.query()
+        .where('accountId', account.id)
+        .where('type', 'debit')
+        .sum('amount as total')
+        .first()
+
+      const credits = parseFloat(creditsResult?.$extras?.total) || 0
+      const debits = parseFloat(debitsResult?.$extras?.total) || 0
+      const initialBalance = parseFloat(String(account.initialBalance)) || 0
+
+      calculatedBalance = initialBalance + credits - debits
+      
+      // S'assurer que ce n'est pas NaN
+      if (isNaN(calculatedBalance)) {
+        calculatedBalance = initialBalance
+      }
+
+      // Mettre à jour le solde en base si différent
+      if (account.balance !== calculatedBalance) {
+        account.balance = calculatedBalance
+        await account.save()
+      }
+    }
+
     return response.ok({
       transactions,
-      account,
+      account: account ? {
+        ...account.toJSON(),
+        balance: calculatedBalance,
+      } : null,
     })
   }
 }

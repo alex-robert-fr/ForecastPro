@@ -91,6 +91,8 @@ export default class TinkService {
       market: params.market || 'FR',
       locale: params.locale || 'fr_FR',
       response_type: 'code',
+      // Forcer une nouvelle session à chaque connexion (ne pas réutiliser les anciens credentials)
+      input_provider: '',
     })
 
     if (params.state) {
@@ -100,6 +102,9 @@ export default class TinkService {
     if (params.test) {
       queryParams.append('test', 'true')
     }
+
+    // Ajouter un timestamp pour éviter le cache
+    queryParams.append('t', Date.now().toString())
 
     const url = `${baseUrl}?${queryParams.toString()}`
     console.log('🔗 Tink Link URL:', url)

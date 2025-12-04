@@ -33,6 +33,7 @@ router
     router.post('/bank-connections', [BankConnectionsController, 'create'])
     router.get('/bank-connections/callback', [BankConnectionsController, 'callback'])
     router.post('/bank-connections/sync', [BankConnectionsController, 'sync'])
+    router.delete('/bank-connections/disconnect', [BankConnectionsController, 'destroy'])
     router.delete('/bank-connections/:id', [BankConnectionsController, 'destroy'])
 
     // Tink Token & Accounts (contrôleur séparé)

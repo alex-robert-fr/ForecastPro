@@ -35,10 +35,10 @@ export default class TinkImportService {
   }> {
     // Récupérer ou créer le compte par défaut
     let account = await Account.query().where('isDefault', true).first()
+    const tinkAccount = tinkAccounts[0]
 
     if (!account) {
       // Créer un compte basé sur le premier compte Tink
-      const tinkAccount = tinkAccounts[0]
       account = await Account.create({
         name: tinkAccount?.name || 'Compte Principal',
         bank: 'Tink',
@@ -48,6 +48,15 @@ export default class TinkImportService {
         currency: tinkAccount?.currency || 'EUR',
         isDefault: true,
       })
+    } else {
+      // Mettre à jour les infos du compte avec les données Tink
+      if (tinkAccount) {
+        account.name = tinkAccount.name || account.name
+        account.bank = 'Tink'
+        account.accountNumber = tinkAccount.iban || account.accountNumber
+        account.currency = tinkAccount.currency || account.currency
+        await account.save()
+      }
     }
 
     // Créer un batch d'import
@@ -155,13 +164,18 @@ export default class TinkImportService {
       .sum('amount as total')
       .first()
 
-    const credits = Number(creditsResult?.$extras?.total || 0)
-    const debits = Number(debitsResult?.$extras?.total || 0)
+    // S'assurer que les valeurs sont des nombres valides (pas NaN)
+    const credits = parseFloat(creditsResult?.$extras?.total) || 0
+    const debits = parseFloat(debitsResult?.$extras?.total) || 0
+    const initialBalance = parseFloat(String(account.initialBalance)) || 0
 
     // Le solde = solde initial + crédits - débits
-    account.balance = account.initialBalance + credits - debits
+    const newBalance = initialBalance + credits - debits
+    
+    // Vérifier que le résultat n'est pas NaN
+    account.balance = isNaN(newBalance) ? initialBalance : newBalance
 
-    console.log(`💰 Solde mis à jour: initial=${account.initialBalance}, crédits=${credits}, débits=${debits}, final=${account.balance}`)
+    console.log(`💰 Solde mis à jour: initial=${initialBalance}, crédits=${credits}, débits=${debits}, final=${account.balance}`)
 
     await account.save()
   }

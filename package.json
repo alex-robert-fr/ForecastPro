@@ -66,6 +66,7 @@
     "@tailwindcss/vite": "^4.1.17",
     "@vinejs/vine": "^3.0.1",
     "@vue/server-renderer": "^3.5.25",
+    "@vueuse/core": "^14.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "edge.js": "^6.2.1",

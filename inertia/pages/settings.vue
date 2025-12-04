@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3'
+import { Head } from '@inertiajs/vue3'
 import { ref, computed } from 'vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
 import { Button } from '~/components/ui/button'
-import { Settings, Wallet, ArrowLeft, CheckCircle2, AlertCircle, Loader2 } from 'lucide-vue-next'
+import { Settings, Wallet, CheckCircle2, AlertCircle, Loader2 } from 'lucide-vue-next'
+import FloatingDock from '~/components/FloatingDock.vue'
 
 interface Account {
   id: number
@@ -90,8 +91,7 @@ const handleSubmit = async () => {
     <!-- Header -->
     <header class="bg-slate-900/30 backdrop-blur-sm border-slate-800/50 border-b">
       <div class="mx-auto px-6 py-4 max-w-7xl">
-        <div class="flex justify-between items-center">
-          <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3">
             <div class="flex justify-center items-center bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-xl w-10 h-10">
               <span class="font-bold text-slate-950 text-lg">F</span>
             </div>
@@ -100,15 +100,10 @@ const handleSubmit = async () => {
               <p class="text-slate-500 text-xs">Gestion financière intelligente</p>
             </div>
           </div>
-          <Link href="/" class="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
-            <ArrowLeft class="w-4 h-4" />
-            <span class="text-sm">Retour au tableau de bord</span>
-          </Link>
-        </div>
       </div>
     </header>
 
-    <main class="space-y-8 mx-auto px-6 py-8 max-w-2xl">
+    <main class="space-y-8 mx-auto pl-20 pr-6 py-8 max-w-2xl">
       <!-- Page Title -->
       <div class="flex items-center gap-3">
         <div class="flex justify-center items-center bg-slate-800/50 rounded-xl w-12 h-12">
@@ -223,6 +218,9 @@ const handleSubmit = async () => {
         </CardContent>
       </Card>
     </main>
+
+    <!-- Floating Dock Navigation -->
+    <FloatingDock />
   </div>
 </template>
 

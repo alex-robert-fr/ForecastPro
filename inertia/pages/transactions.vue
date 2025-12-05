@@ -1,89 +1,98 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3'
-import { ref, computed, onMounted } from 'vue'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
-import { Button } from '~/components/ui/button'
-import { 
-  Upload, 
-  FileSpreadsheet, 
-  CheckCircle2, 
-  AlertCircle, 
-  TrendingUp, 
-  TrendingDown, 
-  Loader2, 
-  Search,
-  X,
-  Tag,
-  Sparkles,
-  ShoppingBag,
-  Utensils,
-  Car,
-  Home,
-  Zap,
-  Smartphone,
-  Heart,
-  Gamepad2,
-  GraduationCap,
-  MoreHorizontal,
-  Check,
-  Trash2,
-  Plus
-} from 'lucide-vue-next'
-import FloatingDock from '~/components/FloatingDock.vue'
-import { useCategoryRules, type Category } from '~/composables/useCategoryRules'
+import { Head } from "@inertiajs/vue3";
+import { ref, computed, onMounted } from "vue";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "~/components/ui/card";
+import { Button } from "~/components/ui/button";
+import {
+	Upload,
+	FileSpreadsheet,
+	CheckCircle2,
+	AlertCircle,
+	TrendingUp,
+	TrendingDown,
+	Loader2,
+	Search,
+	X,
+	Tag,
+	Sparkles,
+	ShoppingBag,
+	Utensils,
+	Car,
+	Home,
+	Zap,
+	Smartphone,
+	Heart,
+	Gamepad2,
+	GraduationCap,
+	MoreHorizontal,
+	Check,
+	Trash2,
+	Plus,
+} from "lucide-vue-next";
+import FloatingDock from "~/components/FloatingDock.vue";
+import {
+	useCategoryRules,
+	type Category,
+} from "~/composables/useCategoryRules";
 
 interface Transaction {
-  id: number
-  date: string
-  label: string
-  amount: number
-  type: 'debit' | 'credit'
-  merchant: string | null
-  paymentMethod: string | null
+	id: number;
+	date: string;
+	label: string;
+	amount: number;
+	type: "debit" | "credit";
+	merchant: string | null;
+	paymentMethod: string | null;
 }
 
 interface ImportResult {
-  success: boolean
-  message: string
-  data?: {
-    rowsImported: number
-    rowsSkipped: number
-    parsingErrors: string[]
-  }
+	success: boolean;
+	message: string;
+	data?: {
+		rowsImported: number;
+		rowsSkipped: number;
+		parsingErrors: string[];
+	};
 }
 
-const { 
-  categories, 
-  rules,
-  initialize, 
-  addRule, 
-  removeRule,
-  getCategoryForTransaction,
-  getRuleForTransaction,
-  getMatchingRules,
-  extractKeywords 
-} = useCategoryRules()
+const {
+	categories,
+	rules,
+	initialize,
+	addRule,
+	removeRule,
+	getCategoryForTransaction,
+	getRuleForTransaction,
+	getMatchingRules,
+	extractKeywords,
+} = useCategoryRules();
 
-const fileInput = ref<HTMLInputElement | null>(null)
-const isDragging = ref(false)
-const isUploading = ref(false)
-const uploadResult = ref<ImportResult | null>(null)
-const transactions = ref<Transaction[]>([])
-const balance = ref<number>(0)
-const searchQuery = ref('')
-const filterType = ref<'all' | 'credit' | 'debit'>('all')
-const filterCategory = ref<string>('all')
+const fileInput = ref<HTMLInputElement | null>(null);
+const isDragging = ref(false);
+const isUploading = ref(false);
+const uploadResult = ref<ImportResult | null>(null);
+const transactions = ref<Transaction[]>([]);
+const balance = ref<number>(0);
+const searchQuery = ref("");
+const filterType = ref<"all" | "credit" | "debit">("all");
+const filterCategory = ref<string>("all");
 
 // Modal state
-const isModalOpen = ref(false)
-const selectedTransaction = ref<Transaction | null>(null)
-const extractedKeywords = ref<string[]>([])
-const selectedKeywords = ref<string[]>([]) // Maintenant un tableau pour sélection multiple
-const customKeyword = ref('')
+const isModalOpen = ref(false);
+const selectedTransaction = ref<Transaction | null>(null);
+const extractedKeywords = ref<string[]>([]);
+const selectedKeywords = ref<string[]>([]); // Maintenant un tableau pour sélection multiple
+const customKeyword = ref("");
 
 // Modal de création de transaction
-const showCreateModal = ref(false)
-const isCreating = ref(false)
+const showCreateModal = ref(false);
+const isCreating = ref(false);
 const newTransaction = ref({
 	date: new Date().toISOString().split("T")[0],
 	label: "",
@@ -92,255 +101,317 @@ const newTransaction = ref({
 	merchant: "",
 	category: "",
 	paymentMethod: "",
-})
+});
 
 const iconComponents: Record<string, any> = {
-  utensils: Utensils,
-  car: Car,
-  shopping: ShoppingBag,
-  home: Home,
-  zap: Zap,
-  smartphone: Smartphone,
-  heart: Heart,
-  gamepad: Gamepad2,
-  graduation: GraduationCap,
-  more: MoreHorizontal,
-  'trending-up': TrendingUp,
-}
+	utensils: Utensils,
+	car: Car,
+	shopping: ShoppingBag,
+	home: Home,
+	zap: Zap,
+	smartphone: Smartphone,
+	heart: Heart,
+	gamepad: Gamepad2,
+	graduation: GraduationCap,
+	more: MoreHorizontal,
+	"trending-up": TrendingUp,
+};
 
 const getCsrfToken = (): string => {
-  const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
-  return match ? decodeURIComponent(match[1]) : ''
-}
+	const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+	return match ? decodeURIComponent(match[1]) : "";
+};
 
 const formatAmount = (amount: number) => {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(amount)
-}
+	return new Intl.NumberFormat("fr-FR", {
+		style: "currency",
+		currency: "EUR",
+	}).format(amount);
+};
 
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
-}
+	return new Date(dateStr).toLocaleDateString("fr-FR", {
+		day: "2-digit",
+		month: "short",
+		year: "numeric",
+	});
+};
 
-const getColorClasses = (color: string, type: 'bg' | 'text' | 'border' | 'bg-light') => {
-  const colors: Record<string, Record<string, string>> = {
-    emerald: { bg: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-500/30', 'bg-light': 'bg-emerald-500/10' },
-    green: { bg: 'bg-green-500', text: 'text-green-400', border: 'border-green-500/30', 'bg-light': 'bg-green-500/10' },
-    cyan: { bg: 'bg-cyan-500', text: 'text-cyan-400', border: 'border-cyan-500/30', 'bg-light': 'bg-cyan-500/10' },
-    blue: { bg: 'bg-blue-500', text: 'text-blue-400', border: 'border-blue-500/30', 'bg-light': 'bg-blue-500/10' },
-    violet: { bg: 'bg-violet-500', text: 'text-violet-400', border: 'border-violet-500/30', 'bg-light': 'bg-violet-500/10' },
-    pink: { bg: 'bg-pink-500', text: 'text-pink-400', border: 'border-pink-500/30', 'bg-light': 'bg-pink-500/10' },
-    amber: { bg: 'bg-amber-500', text: 'text-amber-400', border: 'border-amber-500/30', 'bg-light': 'bg-amber-500/10' },
-    rose: { bg: 'bg-rose-500', text: 'text-rose-400', border: 'border-rose-500/30', 'bg-light': 'bg-rose-500/10' },
-    orange: { bg: 'bg-orange-500', text: 'text-orange-400', border: 'border-orange-500/30', 'bg-light': 'bg-orange-500/10' },
-    slate: { bg: 'bg-slate-500', text: 'text-slate-400', border: 'border-slate-500/30', 'bg-light': 'bg-slate-500/10' },
-  }
-  return colors[color]?.[type] || colors.slate[type]
-}
+const getColorClasses = (
+	color: string,
+	type: "bg" | "text" | "border" | "bg-light",
+) => {
+	const colors: Record<string, Record<string, string>> = {
+		emerald: {
+			bg: "bg-emerald-500",
+			text: "text-emerald-400",
+			border: "border-emerald-500/30",
+			"bg-light": "bg-emerald-500/10",
+		},
+		green: {
+			bg: "bg-green-500",
+			text: "text-green-400",
+			border: "border-green-500/30",
+			"bg-light": "bg-green-500/10",
+		},
+		cyan: {
+			bg: "bg-cyan-500",
+			text: "text-cyan-400",
+			border: "border-cyan-500/30",
+			"bg-light": "bg-cyan-500/10",
+		},
+		blue: {
+			bg: "bg-blue-500",
+			text: "text-blue-400",
+			border: "border-blue-500/30",
+			"bg-light": "bg-blue-500/10",
+		},
+		violet: {
+			bg: "bg-violet-500",
+			text: "text-violet-400",
+			border: "border-violet-500/30",
+			"bg-light": "bg-violet-500/10",
+		},
+		pink: {
+			bg: "bg-pink-500",
+			text: "text-pink-400",
+			border: "border-pink-500/30",
+			"bg-light": "bg-pink-500/10",
+		},
+		amber: {
+			bg: "bg-amber-500",
+			text: "text-amber-400",
+			border: "border-amber-500/30",
+			"bg-light": "bg-amber-500/10",
+		},
+		rose: {
+			bg: "bg-rose-500",
+			text: "text-rose-400",
+			border: "border-rose-500/30",
+			"bg-light": "bg-rose-500/10",
+		},
+		orange: {
+			bg: "bg-orange-500",
+			text: "text-orange-400",
+			border: "border-orange-500/30",
+			"bg-light": "bg-orange-500/10",
+		},
+		slate: {
+			bg: "bg-slate-500",
+			text: "text-slate-400",
+			border: "border-slate-500/30",
+			"bg-light": "bg-slate-500/10",
+		},
+	};
+	return colors[color]?.[type] || colors.slate[type];
+};
 
 const totalDebits = computed(() => {
-  return transactions.value
-    .filter((t) => t.type === 'debit')
-    .reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0)
-})
+	return transactions.value
+		.filter((t) => t.type === "debit")
+		.reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
+});
 
 const totalCredits = computed(() => {
-  return transactions.value
-    .filter((t) => t.type === 'credit')
-    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
-})
+	return transactions.value
+		.filter((t) => t.type === "credit")
+		.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+});
 
 const uncategorizedCount = computed(() => {
-  return transactions.value.filter(t => 
-    t.type === 'debit' && !getCategoryForTransaction(t.label)
-  ).length
-})
+	return transactions.value.filter(
+		(t) => t.type === "debit" && !getCategoryForTransaction(t.label),
+	).length;
+});
 
 const filteredTransactions = computed(() => {
-  return transactions.value.filter((t) => {
-    const matchesSearch = searchQuery.value === '' || 
-      t.label.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      (t.merchant && t.merchant.toLowerCase().includes(searchQuery.value.toLowerCase()))
-    
-    const matchesType = filterType.value === 'all' || t.type === filterType.value
-    
-    let matchesCategory = true
-    if (filterCategory.value !== 'all') {
-      if (filterCategory.value === 'uncategorized') {
-        matchesCategory = !getCategoryForTransaction(t.label)
-      } else {
-        const cat = getCategoryForTransaction(t.label)
-        matchesCategory = cat?.id === filterCategory.value
-      }
-    }
-    
-    return matchesSearch && matchesType && matchesCategory
-  })
-})
+	return transactions.value.filter((t) => {
+		const matchesSearch =
+			searchQuery.value === "" ||
+			t.label.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+			(t.merchant &&
+				t.merchant.toLowerCase().includes(searchQuery.value.toLowerCase()));
+
+		const matchesType =
+			filterType.value === "all" || t.type === filterType.value;
+
+		let matchesCategory = true;
+		if (filterCategory.value !== "all") {
+			if (filterCategory.value === "uncategorized") {
+				matchesCategory = !getCategoryForTransaction(t.label);
+			} else {
+				const cat = getCategoryForTransaction(t.label);
+				matchesCategory = cat?.id === filterCategory.value;
+			}
+		}
+
+		return matchesSearch && matchesType && matchesCategory;
+	});
+});
 
 // Obtenir les règles qui s'appliquent à cette transaction
 const getExistingRulesForTransaction = (label: string) => {
-  return getMatchingRules(label)
-}
+	return getMatchingRules(label);
+};
 
 const handleDragOver = (e: DragEvent) => {
-  e.preventDefault()
-  isDragging.value = true
-}
+	e.preventDefault();
+	isDragging.value = true;
+};
 
 const handleDragLeave = () => {
-  isDragging.value = false
-}
+	isDragging.value = false;
+};
 
 const handleDrop = (e: DragEvent) => {
-  e.preventDefault()
-  isDragging.value = false
-  const files = e.dataTransfer?.files
-  if (files && files.length > 0) {
-    uploadFile(files[0])
-  }
-}
+	e.preventDefault();
+	isDragging.value = false;
+	const files = e.dataTransfer?.files;
+	if (files && files.length > 0) {
+		uploadFile(files[0]);
+	}
+};
 
 const handleFileSelect = (e: Event) => {
-  const target = e.target as HTMLInputElement
-  const files = target.files
-  if (files && files.length > 0) {
-    uploadFile(files[0])
-  }
-}
+	const target = e.target as HTMLInputElement;
+	const files = target.files;
+	if (files && files.length > 0) {
+		uploadFile(files[0]);
+	}
+};
 
 const uploadFile = async (file: File) => {
-  if (!file.name.endsWith('.csv')) {
-    uploadResult.value = {
-      success: false,
-      message: 'Veuillez sélectionner un fichier CSV',
-    }
-    return
-  }
+	if (!file.name.endsWith(".csv")) {
+		uploadResult.value = {
+			success: false,
+			message: "Veuillez sélectionner un fichier CSV",
+		};
+		return;
+	}
 
-  isUploading.value = true
-  uploadResult.value = null
+	isUploading.value = true;
+	uploadResult.value = null;
 
-  const formData = new FormData()
-  formData.append('csv', file)
+	const formData = new FormData();
+	formData.append("csv", file);
 
-  try {
-    const response = await fetch('/api/import', {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'X-XSRF-TOKEN': getCsrfToken(),
-      },
-    })
+	try {
+		const response = await fetch("/api/import", {
+			method: "POST",
+			body: formData,
+			headers: {
+				"X-XSRF-TOKEN": getCsrfToken(),
+			},
+		});
 
-    const result = await response.json()
+		const result = await response.json();
 
-    if (response.ok) {
-      uploadResult.value = {
-        success: true,
-        message: result.message,
-        data: result.data,
-      }
-      await loadTransactions()
-    } else {
-      uploadResult.value = {
-        success: false,
-        message: result.error || 'Erreur lors de l\'import',
-      }
-    }
-  } catch (error) {
-    uploadResult.value = {
-      success: false,
-      message: 'Erreur de connexion au serveur',
-    }
-  } finally {
-    isUploading.value = false
-    if (fileInput.value) {
-      fileInput.value.value = ''
-    }
-  }
-}
+		if (response.ok && result.success) {
+			// Le nouveau format API encapsule dans data.data
+			const importData = result.data || result;
+			uploadResult.value = {
+				success: true,
+				message:
+					result.message || `${importData.rowsImported} transactions importées`,
+				data: importData,
+			};
+			await loadTransactions();
+		} else {
+			uploadResult.value = {
+				success: false,
+				message:
+					result.error?.message || result.error || "Erreur lors de l'import",
+			};
+		}
+	} catch (error) {
+		uploadResult.value = {
+			success: false,
+			message: "Erreur de connexion au serveur",
+		};
+	} finally {
+		isUploading.value = false;
+		if (fileInput.value) {
+			fileInput.value.value = "";
+		}
+	}
+};
 
 const loadTransactions = async () => {
-  if (typeof window === 'undefined') return
-  
-  try {
-    const response = await fetch('/api/transactions')
-    const data = await response.json()
-    transactions.value = data.transactions || []
-    balance.value = data.account?.balance || 0
-  } catch (error) {
-    console.error('Erreur lors du chargement des transactions:', error)
-  }
-}
+	if (typeof window === "undefined") return;
+
+	try {
+		const response = await fetch("/api/transactions");
+		const data = await response.json();
+		// Le nouveau format API encapsule dans data.data
+		const result = data.data || data;
+		transactions.value = result.transactions || [];
+		balance.value = result.account?.balance || 0;
+	} catch (error) {
+		console.error("Erreur lors du chargement des transactions:", error);
+	}
+};
 
 // Ouvrir le modal de catégorisation
 const openCategorizeModal = (transaction: Transaction) => {
-  selectedTransaction.value = transaction
-  extractedKeywords.value = extractKeywords(transaction.label)
-  selectedKeywords.value = []
-  customKeyword.value = ''
-  isModalOpen.value = true
-}
+	selectedTransaction.value = transaction;
+	extractedKeywords.value = extractKeywords(transaction.label);
+	selectedKeywords.value = [];
+	customKeyword.value = "";
+	isModalOpen.value = true;
+};
 
 const closeModal = () => {
-  isModalOpen.value = false
-  selectedTransaction.value = null
-  extractedKeywords.value = []
-  selectedKeywords.value = []
-  customKeyword.value = ''
-}
+	isModalOpen.value = false;
+	selectedTransaction.value = null;
+	extractedKeywords.value = [];
+	selectedKeywords.value = [];
+	customKeyword.value = "";
+};
 
 // Toggle sélection d'un mot-clé (ajout/retrait)
 const toggleKeyword = (keyword: string) => {
-  const index = selectedKeywords.value.indexOf(keyword)
-  if (index === -1) {
-    selectedKeywords.value.push(keyword)
-  } else {
-    selectedKeywords.value.splice(index, 1)
-  }
-}
+	const index = selectedKeywords.value.indexOf(keyword);
+	if (index === -1) {
+		selectedKeywords.value.push(keyword);
+	} else {
+		selectedKeywords.value.splice(index, 1);
+	}
+};
 
 // Vérifier si un mot-clé est sélectionné
 const isKeywordSelected = (keyword: string) => {
-  return selectedKeywords.value.includes(keyword)
-}
+	return selectedKeywords.value.includes(keyword);
+};
 
 // Ajouter un mot-clé personnalisé à la sélection
 const addCustomKeyword = () => {
-  const keyword = customKeyword.value.trim().toLowerCase()
-  if (keyword && !selectedKeywords.value.includes(keyword)) {
-    selectedKeywords.value.push(keyword)
-    customKeyword.value = ''
-  }
-}
+	const keyword = customKeyword.value.trim().toLowerCase();
+	if (keyword && !selectedKeywords.value.includes(keyword)) {
+		selectedKeywords.value.push(keyword);
+		customKeyword.value = "";
+	}
+};
 
 // Retirer un mot-clé de la sélection
 const removeSelectedKeyword = (keyword: string) => {
-  const index = selectedKeywords.value.indexOf(keyword)
-  if (index !== -1) {
-    selectedKeywords.value.splice(index, 1)
-  }
-}
+	const index = selectedKeywords.value.indexOf(keyword);
+	if (index !== -1) {
+		selectedKeywords.value.splice(index, 1);
+	}
+};
 
 // Assigner une catégorie aux mots-clés sélectionnés
 const assignCategory = (category: Category) => {
-  if (selectedKeywords.value.length === 0) return
-  
-  addRule(selectedKeywords.value, category.id)
-  closeModal()
-}
+	if (selectedKeywords.value.length === 0) return;
+
+	addRule(selectedKeywords.value, category.id);
+	closeModal();
+};
 
 // Supprimer une règle existante
 const removeExistingRule = (ruleId: string) => {
-  removeRule(ruleId)
-}
+	removeRule(ruleId);
+};
 
 const createTransaction = async () => {
 	if (!newTransaction.value.label || !newTransaction.value.amount) {
@@ -376,8 +447,10 @@ const createTransaction = async () => {
 
 		const data = await response.json();
 
-		if (!response.ok) {
-			throw new Error(data.error || "Erreur lors de la création");
+		if (!response.ok || !data.success) {
+			throw new Error(
+				data.error?.message || data.error || "Erreur lors de la création",
+			);
 		}
 
 		// Réinitialiser le formulaire
@@ -434,8 +507,10 @@ const deleteTransaction = async (transactionId: number, event: Event) => {
 
 		const data = await response.json();
 
-		if (!response.ok) {
-			throw new Error(data.error || "Erreur lors de la suppression");
+		if (!response.ok || !data.success) {
+			throw new Error(
+				data.error?.message || data.error || "Erreur lors de la suppression",
+			);
 		}
 
 		// Recharger les transactions
@@ -451,9 +526,9 @@ const deleteTransaction = async (transactionId: number, event: Event) => {
 };
 
 onMounted(() => {
-  initialize()
-  loadTransactions()
-})
+	initialize();
+	loadTransactions();
+});
 </script>
 
 <template>

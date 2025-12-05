@@ -7,39 +7,79 @@
 |
 */
 
-import router from '@adonisjs/core/services/router'
+import router from "@adonisjs/core/services/router";
 
-const ImportsController = () => import('#controllers/imports_controller')
-const SettingsController = () => import('#controllers/settings_controller')
-const BankConnectionsController = () => import('#controllers/bank_connections_controller')
-const TinkController = () => import('#controllers/tink_controller')
+// Nouveaux controllers (architecture en couches)
+const TransactionsController = () =>
+	import("#interface/http/controllers/transactions_controller");
+const ImportsController = () =>
+	import("#interface/http/controllers/imports_controller");
+const AccountsController = () =>
+	import("#interface/http/controllers/accounts_controller");
+const BankConnectionsController = () =>
+	import("#interface/http/controllers/bank_connections_controller");
 
-// Pages
-router.on('/').renderInertia('home')
-router.on('/transactions').renderInertia('transactions')
-router.on('/budgets').renderInertia('budgets')
-router.get('/settings', [SettingsController, 'show'])
+// ============================================================================
+// PAGES
+// ============================================================================
 
+router.on("/").renderInertia("home");
+router.on("/transactions").renderInertia("transactions");
+router.on("/budgets").renderInertia("budgets");
+router.get("/settings", [AccountsController, "show"]);
+
+// ============================================================================
 // API
+// ============================================================================
+
 router
-  .group(() => {
-    router.post('/import', [ImportsController, 'store'])
-    router.get('/transactions', [ImportsController, 'index'])
-    router.post('/transactions', [ImportsController, 'createTransaction'])
-    router.delete('/transactions/:id', [ImportsController, 'destroy'])
-    router.put('/settings', [SettingsController, 'update'])
+	.group(() => {
+		// Transactions
+		router.get("/transactions", [TransactionsController, "index"]);
+		router.post("/transactions", [TransactionsController, "store"]);
+		router.get("/transactions/:id", [TransactionsController, "show"]);
+		router.patch("/transactions/:id/category", [
+			TransactionsController,
+			"updateCategory",
+		]);
+		router.delete("/transactions/:id", [TransactionsController, "destroy"]);
 
-    // Tink Bank Connections
-    router.get('/banks', [BankConnectionsController, 'listBanks'])
-    router.get('/bank-connections', [BankConnectionsController, 'index'])
-    router.post('/bank-connections', [BankConnectionsController, 'create'])
-    router.get('/bank-connections/callback', [BankConnectionsController, 'callback'])
-    router.post('/bank-connections/sync', [BankConnectionsController, 'sync'])
-    router.delete('/bank-connections/disconnect', [BankConnectionsController, 'destroy'])
-    router.delete('/bank-connections/:id', [BankConnectionsController, 'destroy'])
+		// Import CSV
+		router.post("/import", [ImportsController, "store"]);
 
-    // Tink Token & Accounts (contrôleur séparé)
-    router.post('/tink/token', [TinkController, 'store'])
-    router.get('/tink/accounts', [TinkController, 'index'])
-  })
-  .prefix('/api')
+		// Paramètres compte
+		router.put("/settings", [AccountsController, "update"]);
+		router.get("/accounts/stats", [AccountsController, "stats"]);
+		router.get("/accounts/debug-balance", [AccountsController, "debugBalance"]);
+		router.post("/accounts/recalculate-balance", [
+			AccountsController,
+			"recalculateBalance",
+		]);
+
+		// Connexions bancaires (Tink)
+		router.get("/banks", [BankConnectionsController, "listBanks"]);
+		router.get("/bank-connections", [BankConnectionsController, "index"]);
+		router.post("/bank-connections", [BankConnectionsController, "create"]);
+		router.get("/bank-connections/callback", [
+			BankConnectionsController,
+			"callback",
+		]);
+		router.post("/bank-connections/sync", [BankConnectionsController, "sync"]);
+		router.post("/bank-connections/adjust-balance", [
+			BankConnectionsController,
+			"adjustBalance",
+		]);
+		router.delete("/bank-connections/disconnect", [
+			BankConnectionsController,
+			"disconnect",
+		]);
+		router.delete("/bank-connections/:id", [
+			BankConnectionsController,
+			"disconnect",
+		]);
+
+		// Tink Token & Accounts
+		router.post("/tink/token", [BankConnectionsController, "exchangeToken"]);
+		router.get("/tink/accounts", [BankConnectionsController, "getAccounts"]);
+	})
+	.prefix("/api");

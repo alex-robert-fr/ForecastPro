@@ -140,8 +140,10 @@ const loadDashboard = async () => {
 	try {
 		const response = await fetch("/api/transactions");
 		const data = await response.json();
-		const transactions = data.transactions || [];
-		const balance = data.account?.balance || 0;
+		// Le nouveau format API encapsule dans data.data
+		const result = data.data || data;
+		const transactions = result.transactions || [];
+		const balance = result.account?.balance || 0;
 
 		// Calculer les revenus et dépenses du mois en cours
 		const now = new Date();

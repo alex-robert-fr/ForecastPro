@@ -1,88 +1,103 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3'
-import { ref, computed } from 'vue'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
-import { Button } from '~/components/ui/button'
-import { Settings, Wallet, CheckCircle2, AlertCircle, Loader2 } from 'lucide-vue-next'
-import FloatingDock from '~/components/FloatingDock.vue'
-import BankConnection from '~/components/BankConnection.vue'
+import { Head } from "@inertiajs/vue3";
+import { ref, computed } from "vue";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "~/components/ui/card";
+import { Button } from "~/components/ui/button";
+import {
+	Settings,
+	Wallet,
+	CheckCircle2,
+	AlertCircle,
+	Loader2,
+} from "lucide-vue-next";
+import FloatingDock from "~/components/FloatingDock.vue";
+import BankConnection from "~/components/BankConnection.vue";
 
 interface Account {
-  id: number
-  name: string
-  bank: string | null
-  initialBalance: number
-  balance: number
+	id: number;
+	name: string;
+	bank: string | null;
+	initialBalance: number;
+	balance: number;
 }
 
 interface Props {
-  account: Account | null
+	account: Account | null;
 }
 
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 
 const initialBalance = ref<string>(
-  props.account?.initialBalance?.toString() || '0'
-)
-const isSaving = ref(false)
-const saveResult = ref<{ success: boolean; message: string } | null>(null)
+	props.account?.initialBalance?.toString() || "0",
+);
+const isSaving = ref(false);
+const saveResult = ref<{ success: boolean; message: string } | null>(null);
 
 // Récupérer le token CSRF depuis le cookie
 const getCsrfToken = (): string => {
-  const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
-  return match ? decodeURIComponent(match[1]) : ''
-}
+	const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+	return match ? decodeURIComponent(match[1]) : "";
+};
 
 const formatAmount = (amount: number) => {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(amount)
-}
+	return new Intl.NumberFormat("fr-FR", {
+		style: "currency",
+		currency: "EUR",
+	}).format(amount);
+};
 
 const formattedInitialBalance = computed(() => {
-  const value = parseFloat(initialBalance.value.replace(',', '.')) || 0
-  return formatAmount(value)
-})
+	const value = parseFloat(initialBalance.value.replace(",", ".")) || 0;
+	return formatAmount(value);
+});
 
 const handleSubmit = async () => {
-  isSaving.value = true
-  saveResult.value = null
+	isSaving.value = true;
+	saveResult.value = null;
 
-  try {
-    const response = await fetch('/api/settings', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-XSRF-TOKEN': getCsrfToken(),
-      },
-      body: JSON.stringify({
-        initialBalance: parseFloat(initialBalance.value.replace(',', '.')) || 0,
-      }),
-    })
+	try {
+		const response = await fetch("/api/settings", {
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				"X-XSRF-TOKEN": getCsrfToken(),
+			},
+			body: JSON.stringify({
+				initialBalance: parseFloat(initialBalance.value.replace(",", ".")) || 0,
+			}),
+		});
 
-    const result = await response.json()
+		const result = await response.json();
 
-    if (response.ok) {
-      saveResult.value = {
-        success: true,
-        message: result.message,
-      }
-    } else {
-      saveResult.value = {
-        success: false,
-        message: result.error || 'Erreur lors de la sauvegarde',
-      }
-    }
-  } catch (error) {
-    saveResult.value = {
-      success: false,
-      message: 'Erreur de connexion au serveur',
-    }
-  } finally {
-    isSaving.value = false
-  }
-}
+		if (response.ok && result.success) {
+			saveResult.value = {
+				success: true,
+				message: result.message || "Paramètres enregistrés avec succès",
+			};
+		} else {
+			saveResult.value = {
+				success: false,
+				message:
+					result.error?.message ||
+					result.error ||
+					"Erreur lors de la sauvegarde",
+			};
+		}
+	} catch (error) {
+		saveResult.value = {
+			success: false,
+			message: "Erreur de connexion au serveur",
+		};
+	} finally {
+		isSaving.value = false;
+	}
+};
 </script>
 
 <template>

@@ -1,296 +1,368 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3'
-import { ref, computed, onMounted, watch } from 'vue'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
-import { Button } from '~/components/ui/button'
-import { 
-  PieChart, 
-  Plus, 
-  Pencil, 
-  Trash2, 
-  TrendingUp, 
-  TrendingDown,
-  AlertTriangle,
-  CheckCircle2,
-  ShoppingBag,
-  Utensils,
-  Car,
-  Home,
-  Zap,
-  Smartphone,
-  Heart,
-  Gamepad2,
-  GraduationCap,
-  MoreHorizontal,
-  X,
-  Check,
-  Tag
-} from 'lucide-vue-next'
-import FloatingDock from '~/components/FloatingDock.vue'
-import { useCategoryRules } from '~/composables/useCategoryRules'
+import { Head, Link } from "@inertiajs/vue3";
+import { ref, computed, onMounted, watch } from "vue";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "~/components/ui/card";
+import { Button } from "~/components/ui/button";
+import {
+	PieChart,
+	Plus,
+	Pencil,
+	Trash2,
+	TrendingUp,
+	TrendingDown,
+	AlertTriangle,
+	CheckCircle2,
+	ShoppingBag,
+	Utensils,
+	Car,
+	Home,
+	Zap,
+	Smartphone,
+	Heart,
+	Gamepad2,
+	GraduationCap,
+	MoreHorizontal,
+	X,
+	Check,
+	Tag,
+} from "lucide-vue-next";
+import FloatingDock from "~/components/FloatingDock.vue";
+import { useCategoryRules } from "~/composables/useCategoryRules";
 
-const { categories, initialize, getCategoryForTransaction } = useCategoryRules()
+const { categories, initialize, getCategoryForTransaction } =
+	useCategoryRules();
 
 interface Budget {
-  id: string
-  name: string
-  category: string
-  limit: number
-  spent: number
-  color: string
-  icon: string
+	id: string;
+	name: string;
+	category: string;
+	limit: number;
+	spent: number;
+	color: string;
+	icon: string;
 }
 
 interface Transaction {
-  id: number
-  date: string
-  label: string
-  amount: number
-  type: 'debit' | 'credit'
-  merchant: string | null
+	id: number;
+	date: string;
+	label: string;
+	amount: number;
+	type: "debit" | "credit";
+	merchant: string | null;
 }
 
 // Budgets basés sur les catégories du composable
-const budgetLimits = ref<Record<string, number>>({})
-const BUDGET_STORAGE_KEY = 'forecastpro_budget_limits'
+const budgetLimits = ref<Record<string, number>>({});
+const BUDGET_STORAGE_KEY = "forecastpro_budget_limits";
 
 // Charger les limites de budget depuis localStorage
 const loadBudgetLimits = () => {
-  if (typeof window === 'undefined') return
-  try {
-    const stored = localStorage.getItem(BUDGET_STORAGE_KEY)
-    if (stored) {
-      budgetLimits.value = JSON.parse(stored)
-    }
-  } catch (error) {
-    console.error('Erreur lors du chargement des limites:', error)
-  }
-}
+	if (typeof window === "undefined") return;
+	try {
+		const stored = localStorage.getItem(BUDGET_STORAGE_KEY);
+		if (stored) {
+			budgetLimits.value = JSON.parse(stored);
+		}
+	} catch (error) {
+		console.error("Erreur lors du chargement des limites:", error);
+	}
+};
 
 // Sauvegarder les limites
 const saveBudgetLimits = () => {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(budgetLimits.value))
-  } catch (error) {
-    console.error('Erreur lors de la sauvegarde des limites:', error)
-  }
-}
+	if (typeof window === "undefined") return;
+	try {
+		localStorage.setItem(
+			BUDGET_STORAGE_KEY,
+			JSON.stringify(budgetLimits.value),
+		);
+	} catch (error) {
+		console.error("Erreur lors de la sauvegarde des limites:", error);
+	}
+};
 
 // Budgets calculés à partir des catégories et des limites
 const budgets = computed(() => {
-  return categories.value
-    .filter(cat => cat.id !== 'income') // Exclure les revenus
-    .map(cat => ({
-      id: cat.id,
-      name: cat.name,
-      category: cat.id,
-      limit: budgetLimits.value[cat.id] || 0,
-      spent: spentByCategory.value[cat.id] || 0,
-      color: cat.color,
-      icon: cat.icon
-    }))
-    .filter(b => b.limit > 0 || b.spent > 0) // Afficher seulement si limite définie ou dépenses
-})
+	return categories.value
+		.filter((cat) => cat.id !== "income") // Exclure les revenus
+		.map((cat) => ({
+			id: cat.id,
+			name: cat.name,
+			category: cat.id,
+			limit: budgetLimits.value[cat.id] || 0,
+			spent: spentByCategory.value[cat.id] || 0,
+			color: cat.color,
+			icon: cat.icon,
+		}))
+		.filter((b) => b.limit > 0 || b.spent > 0); // Afficher seulement si limite définie ou dépenses
+});
 
-const transactions = ref<Transaction[]>([])
-const spentByCategory = ref<Record<string, number>>({})
-const isModalOpen = ref(false)
-const editingBudget = ref<Budget | null>(null)
-const selectedCategoryId = ref('')
-const newLimit = ref(0)
+const transactions = ref<Transaction[]>([]);
+const spentByCategory = ref<Record<string, number>>({});
+const isModalOpen = ref(false);
+const editingBudget = ref<Budget | null>(null);
+const selectedCategoryId = ref("");
+const newLimit = ref(0);
 
 const availableColors = [
-  { name: 'emerald', class: 'bg-emerald-500' },
-  { name: 'cyan', class: 'bg-cyan-500' },
-  { name: 'blue', class: 'bg-blue-500' },
-  { name: 'violet', class: 'bg-violet-500' },
-  { name: 'pink', class: 'bg-pink-500' },
-  { name: 'amber', class: 'bg-amber-500' },
-  { name: 'rose', class: 'bg-rose-500' },
-  { name: 'orange', class: 'bg-orange-500' },
-]
+	{ name: "emerald", class: "bg-emerald-500" },
+	{ name: "cyan", class: "bg-cyan-500" },
+	{ name: "blue", class: "bg-blue-500" },
+	{ name: "violet", class: "bg-violet-500" },
+	{ name: "pink", class: "bg-pink-500" },
+	{ name: "amber", class: "bg-amber-500" },
+	{ name: "rose", class: "bg-rose-500" },
+	{ name: "orange", class: "bg-orange-500" },
+];
 
 const availableIcons = [
-  { name: 'utensils', label: 'Alimentation' },
-  { name: 'car', label: 'Transport' },
-  { name: 'shopping', label: 'Shopping' },
-  { name: 'home', label: 'Logement' },
-  { name: 'zap', label: 'Énergie' },
-  { name: 'smartphone', label: 'Tech' },
-  { name: 'heart', label: 'Santé' },
-  { name: 'gamepad', label: 'Loisirs' },
-  { name: 'graduation', label: 'Éducation' },
-  { name: 'more', label: 'Autre' },
-]
+	{ name: "utensils", label: "Alimentation" },
+	{ name: "car", label: "Transport" },
+	{ name: "shopping", label: "Shopping" },
+	{ name: "home", label: "Logement" },
+	{ name: "zap", label: "Énergie" },
+	{ name: "smartphone", label: "Tech" },
+	{ name: "heart", label: "Santé" },
+	{ name: "gamepad", label: "Loisirs" },
+	{ name: "graduation", label: "Éducation" },
+	{ name: "more", label: "Autre" },
+];
 
 const iconComponents: Record<string, any> = {
-  utensils: Utensils,
-  car: Car,
-  shopping: ShoppingBag,
-  home: Home,
-  zap: Zap,
-  smartphone: Smartphone,
-  heart: Heart,
-  gamepad: Gamepad2,
-  graduation: GraduationCap,
-  more: MoreHorizontal,
-}
+	utensils: Utensils,
+	car: Car,
+	shopping: ShoppingBag,
+	home: Home,
+	zap: Zap,
+	smartphone: Smartphone,
+	heart: Heart,
+	gamepad: Gamepad2,
+	graduation: GraduationCap,
+	more: MoreHorizontal,
+};
 
 const formatAmount = (amount: number) => {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(amount)
-}
+	return new Intl.NumberFormat("fr-FR", {
+		style: "currency",
+		currency: "EUR",
+	}).format(amount);
+};
 
-const getColorClasses = (color: string, type: 'bg' | 'text' | 'border' | 'bg-light') => {
-  const colors: Record<string, Record<string, string>> = {
-    emerald: { bg: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-500/30', 'bg-light': 'bg-emerald-500/10' },
-    cyan: { bg: 'bg-cyan-500', text: 'text-cyan-400', border: 'border-cyan-500/30', 'bg-light': 'bg-cyan-500/10' },
-    blue: { bg: 'bg-blue-500', text: 'text-blue-400', border: 'border-blue-500/30', 'bg-light': 'bg-blue-500/10' },
-    violet: { bg: 'bg-violet-500', text: 'text-violet-400', border: 'border-violet-500/30', 'bg-light': 'bg-violet-500/10' },
-    pink: { bg: 'bg-pink-500', text: 'text-pink-400', border: 'border-pink-500/30', 'bg-light': 'bg-pink-500/10' },
-    amber: { bg: 'bg-amber-500', text: 'text-amber-400', border: 'border-amber-500/30', 'bg-light': 'bg-amber-500/10' },
-    rose: { bg: 'bg-rose-500', text: 'text-rose-400', border: 'border-rose-500/30', 'bg-light': 'bg-rose-500/10' },
-    orange: { bg: 'bg-orange-500', text: 'text-orange-400', border: 'border-orange-500/30', 'bg-light': 'bg-orange-500/10' },
-  }
-  return colors[color]?.[type] || colors.emerald[type]
-}
+const getColorClasses = (
+	color: string,
+	type: "bg" | "text" | "border" | "bg-light",
+) => {
+	const colors: Record<string, Record<string, string>> = {
+		emerald: {
+			bg: "bg-emerald-500",
+			text: "text-emerald-400",
+			border: "border-emerald-500/30",
+			"bg-light": "bg-emerald-500/10",
+		},
+		cyan: {
+			bg: "bg-cyan-500",
+			text: "text-cyan-400",
+			border: "border-cyan-500/30",
+			"bg-light": "bg-cyan-500/10",
+		},
+		blue: {
+			bg: "bg-blue-500",
+			text: "text-blue-400",
+			border: "border-blue-500/30",
+			"bg-light": "bg-blue-500/10",
+		},
+		violet: {
+			bg: "bg-violet-500",
+			text: "text-violet-400",
+			border: "border-violet-500/30",
+			"bg-light": "bg-violet-500/10",
+		},
+		pink: {
+			bg: "bg-pink-500",
+			text: "text-pink-400",
+			border: "border-pink-500/30",
+			"bg-light": "bg-pink-500/10",
+		},
+		amber: {
+			bg: "bg-amber-500",
+			text: "text-amber-400",
+			border: "border-amber-500/30",
+			"bg-light": "bg-amber-500/10",
+		},
+		rose: {
+			bg: "bg-rose-500",
+			text: "text-rose-400",
+			border: "border-rose-500/30",
+			"bg-light": "bg-rose-500/10",
+		},
+		orange: {
+			bg: "bg-orange-500",
+			text: "text-orange-400",
+			border: "border-orange-500/30",
+			"bg-light": "bg-orange-500/10",
+		},
+	};
+	return colors[color]?.[type] || colors.emerald[type];
+};
 
 const getPercentage = (budget: Budget) => {
-  if (budget.limit === 0) return 0
-  return Math.min((budget.spent / budget.limit) * 100, 100)
-}
+	if (budget.limit === 0) return 0;
+	return Math.min((budget.spent / budget.limit) * 100, 100);
+};
 
 const getStatus = (budget: Budget) => {
-  const percentage = getPercentage(budget)
-  if (percentage >= 100) return 'exceeded'
-  if (percentage >= 80) return 'warning'
-  return 'ok'
-}
+	const percentage = getPercentage(budget);
+	if (percentage >= 100) return "exceeded";
+	if (percentage >= 80) return "warning";
+	return "ok";
+};
 
-const totalBudget = computed(() => budgets.value.reduce((sum, b) => sum + b.limit, 0))
-const totalSpent = computed(() => budgets.value.reduce((sum, b) => sum + b.spent, 0))
-const totalRemaining = computed(() => totalBudget.value - totalSpent.value)
+const totalBudget = computed(() =>
+	budgets.value.reduce((sum, b) => sum + b.limit, 0),
+);
+const totalSpent = computed(() =>
+	budgets.value.reduce((sum, b) => sum + b.spent, 0),
+);
+const totalRemaining = computed(() => totalBudget.value - totalSpent.value);
 
-const budgetsExceeded = computed(() => budgets.value.filter(b => getStatus(b) === 'exceeded').length)
-const budgetsWarning = computed(() => budgets.value.filter(b => getStatus(b) === 'warning').length)
+const budgetsExceeded = computed(
+	() => budgets.value.filter((b) => getStatus(b) === "exceeded").length,
+);
+const budgetsWarning = computed(
+	() => budgets.value.filter((b) => getStatus(b) === "warning").length,
+);
 
 // Calculer les dépenses par catégorie en utilisant les règles
 const calculateSpentAmounts = () => {
-  const spent: Record<string, number> = {}
-  
-  // Calculer les dépenses du mois en cours
-  const now = new Date()
-  const currentMonthTransactions = transactions.value.filter(t => {
-    const date = new Date(t.date)
-    return date.getMonth() === now.getMonth() && 
-           date.getFullYear() === now.getFullYear() &&
-           t.type === 'debit'
-  })
-  
-  currentMonthTransactions.forEach(t => {
-    const category = getCategoryForTransaction(t.label)
-    if (category) {
-      spent[category.id] = (spent[category.id] || 0) + Math.abs(t.amount)
-    }
-  })
-  
-  spentByCategory.value = spent
-}
+	const spent: Record<string, number> = {};
+
+	// Calculer les dépenses du mois en cours
+	const now = new Date();
+	const currentMonthTransactions = transactions.value.filter((t) => {
+		const date = new Date(t.date);
+		return (
+			date.getMonth() === now.getMonth() &&
+			date.getFullYear() === now.getFullYear() &&
+			t.type === "debit"
+		);
+	});
+
+	currentMonthTransactions.forEach((t) => {
+		const category = getCategoryForTransaction(t.label);
+		if (category) {
+			spent[category.id] = (spent[category.id] || 0) + Math.abs(t.amount);
+		}
+	});
+
+	spentByCategory.value = spent;
+};
 
 // Nombre de transactions non catégorisées
 const uncategorizedCount = computed(() => {
-  const now = new Date()
-  return transactions.value.filter(t => {
-    const date = new Date(t.date)
-    return date.getMonth() === now.getMonth() && 
-           date.getFullYear() === now.getFullYear() &&
-           t.type === 'debit' &&
-           !getCategoryForTransaction(t.label)
-  }).length
-})
+	const now = new Date();
+	return transactions.value.filter((t) => {
+		const date = new Date(t.date);
+		return (
+			date.getMonth() === now.getMonth() &&
+			date.getFullYear() === now.getFullYear() &&
+			t.type === "debit" &&
+			!getCategoryForTransaction(t.label)
+		);
+	}).length;
+});
 
 const uncategorizedAmount = computed(() => {
-  const now = new Date()
-  return transactions.value
-    .filter(t => {
-      const date = new Date(t.date)
-      return date.getMonth() === now.getMonth() && 
-             date.getFullYear() === now.getFullYear() &&
-             t.type === 'debit' &&
-             !getCategoryForTransaction(t.label)
-    })
-    .reduce((sum, t) => sum + Math.abs(t.amount), 0)
-})
+	const now = new Date();
+	return transactions.value
+		.filter((t) => {
+			const date = new Date(t.date);
+			return (
+				date.getMonth() === now.getMonth() &&
+				date.getFullYear() === now.getFullYear() &&
+				t.type === "debit" &&
+				!getCategoryForTransaction(t.label)
+			);
+		})
+		.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+});
 
 const loadTransactions = async () => {
-  if (typeof window === 'undefined') return
-  
-  try {
-    const response = await fetch('/api/transactions')
-    const data = await response.json()
-    transactions.value = data.transactions || []
-    calculateSpentAmounts()
-  } catch (error) {
-    console.error('Erreur lors du chargement des transactions:', error)
-  }
-}
+	if (typeof window === "undefined") return;
+
+	try {
+		const response = await fetch("/api/transactions");
+		const data = await response.json();
+		// Le nouveau format API encapsule dans data.data
+		const result = data.data || data;
+		transactions.value = result.transactions || [];
+		calculateSpentAmounts();
+	} catch (error) {
+		console.error("Erreur lors du chargement des transactions:", error);
+	}
+};
 
 const openModal = (budget?: Budget) => {
-  if (budget) {
-    editingBudget.value = budget
-    selectedCategoryId.value = budget.category
-    newLimit.value = budget.limit
-  } else {
-    editingBudget.value = null
-    selectedCategoryId.value = ''
-    newLimit.value = 0
-  }
-  isModalOpen.value = true
-}
+	if (budget) {
+		editingBudget.value = budget;
+		selectedCategoryId.value = budget.category;
+		newLimit.value = budget.limit;
+	} else {
+		editingBudget.value = null;
+		selectedCategoryId.value = "";
+		newLimit.value = 0;
+	}
+	isModalOpen.value = true;
+};
 
 const closeModal = () => {
-  isModalOpen.value = false
-  editingBudget.value = null
-  selectedCategoryId.value = ''
-  newLimit.value = 0
-}
+	isModalOpen.value = false;
+	editingBudget.value = null;
+	selectedCategoryId.value = "";
+	newLimit.value = 0;
+};
 
 const saveBudget = () => {
-  const categoryId = editingBudget.value?.category || selectedCategoryId.value
-  if (!categoryId || newLimit.value < 0) return
-  
-  budgetLimits.value[categoryId] = newLimit.value
-  saveBudgetLimits()
-  
-  closeModal()
-}
+	const categoryId = editingBudget.value?.category || selectedCategoryId.value;
+	if (!categoryId || newLimit.value < 0) return;
+
+	budgetLimits.value[categoryId] = newLimit.value;
+	saveBudgetLimits();
+
+	closeModal();
+};
 
 const deleteBudget = (id: string) => {
-  delete budgetLimits.value[id]
-  saveBudgetLimits()
-}
+	delete budgetLimits.value[id];
+	saveBudgetLimits();
+};
 
 // Catégories disponibles pour ajouter un budget (celles qui n'ont pas encore de limite)
 const availableCategoriesForBudget = computed(() => {
-  return categories.value.filter(cat => 
-    cat.id !== 'income' && 
-    !budgetLimits.value[cat.id]
-  )
-})
+	return categories.value.filter(
+		(cat) => cat.id !== "income" && !budgetLimits.value[cat.id],
+	);
+});
 
 onMounted(() => {
-  initialize()
-  loadBudgetLimits()
-  loadTransactions()
-})
+	initialize();
+	loadBudgetLimits();
+	loadTransactions();
+});
 
 // Recalculer quand les catégories changent
-watch(categories, () => {
-  calculateSpentAmounts()
-}, { deep: true })
+watch(
+	categories,
+	() => {
+		calculateSpentAmounts();
+	},
+	{ deep: true },
+);
 </script>
 
 <template>

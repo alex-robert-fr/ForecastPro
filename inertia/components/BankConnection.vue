@@ -1,298 +1,340 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card'
+import { ref, onMounted } from "vue";
 import {
-  Building2,
-  Link2,
-  Unlink,
-  RefreshCw,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  Search,
-  ExternalLink,
-  Banknote,
-  ChevronRight,
-  CreditCard,
-} from 'lucide-vue-next'
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "~/components/ui/card";
+import {
+	Building2,
+	Link2,
+	Unlink,
+	RefreshCw,
+	Loader2,
+	CheckCircle2,
+	AlertCircle,
+	Search,
+	ExternalLink,
+	Banknote,
+	ChevronRight,
+	CreditCard,
+} from "lucide-vue-next";
 
 interface Bank {
-  id: string
-  name: string
-  type: string
-  status: string
-  logo: string | null
+	id: string;
+	name: string;
+	type: string;
+	status: string;
+	logo: string | null;
 }
 
 interface BankAccount {
-  id: string
-  name: string
-  type: string
-  iban: string | null
-  balance: number | null
-  currency: string
+	id: string;
+	name: string;
+	type: string;
+	iban: string | null;
+	balance: number | null;
+	currency: string;
 }
 
 // États
-const isLoading = ref(false)
-const searchQuery = ref('')
-const banks = ref<Bank[]>([])
-const authUrl = ref<string | null>(null)
-const error = ref<string | null>(null)
-const successMessage = ref<string | null>(null)
-const isSyncing = ref(false)
-const syncedTransactions = ref<number | null>(null)
+const isLoading = ref(false);
+const searchQuery = ref("");
+const banks = ref<Bank[]>([]);
+const authUrl = ref<string | null>(null);
+const error = ref<string | null>(null);
+const successMessage = ref<string | null>(null);
+const isSyncing = ref(false);
+const syncedTransactions = ref<number | null>(null);
 
 // État de connexion
-const isConnected = ref(false)
-const userAccessToken = ref<string | null>(null)
-const accounts = ref<BankAccount[]>([])
+const isConnected = ref(false);
+const userAccessToken = ref<string | null>(null);
+const accounts = ref<BankAccount[]>([]);
 
 // Récupérer le token CSRF
 const getCsrfToken = (): string => {
-  const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
-  return match ? decodeURIComponent(match[1]) : ''
-}
+	const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+	return match ? decodeURIComponent(match[1]) : "";
+};
 
 // Formater le montant
-const formatAmount = (amount: number | null, currency: string = 'EUR') => {
-  if (amount === null) return '—'
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency,
-  }).format(amount)
-}
+const formatAmount = (amount: number | null, currency: string = "EUR") => {
+	if (amount === null) return "—";
+	return new Intl.NumberFormat("fr-FR", {
+		style: "currency",
+		currency,
+	}).format(amount);
+};
 
 // Formater l'IBAN
 const formatIban = (iban: string | null) => {
-  if (!iban) return '—'
-  return iban.replace(/(.{4})/g, '$1 ').trim()
-}
+	if (!iban) return "—";
+	return iban.replace(/(.{4})/g, "$1 ").trim();
+};
 
 // Rechercher des banques
 const searchBanks = async () => {
-  if (searchQuery.value.length < 2) {
-    banks.value = []
-    return
-  }
+	if (searchQuery.value.length < 2) {
+		banks.value = [];
+		return;
+	}
 
-  isLoading.value = true
-  error.value = null
+	isLoading.value = true;
+	error.value = null;
 
-  try {
-    const response = await fetch(`/api/banks?search=${encodeURIComponent(searchQuery.value)}`)
-    const data = await response.json()
+	try {
+		const response = await fetch(
+			`/api/banks?search=${encodeURIComponent(searchQuery.value)}`,
+		);
+		const data = await response.json();
 
-    if (response.ok) {
-      banks.value = data.banks
-    } else {
-      error.value = data.error || 'Erreur lors de la recherche'
-    }
-  } catch (e) {
-    error.value = 'Erreur de connexion au serveur'
-  } finally {
-    isLoading.value = false
-  }
-}
+		if (response.ok) {
+			banks.value = data.banks;
+		} else {
+			error.value = data.error || "Erreur lors de la recherche";
+		}
+	} catch (e) {
+		error.value = "Erreur de connexion au serveur";
+	} finally {
+		isLoading.value = false;
+	}
+};
 
 // Initier une connexion bancaire
 const initiateConnection = async () => {
-  isLoading.value = true
-  error.value = null
-  authUrl.value = null
+	isLoading.value = true;
+	error.value = null;
+	authUrl.value = null;
 
-  try {
-    const response = await fetch('/api/bank-connections', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-XSRF-TOKEN': getCsrfToken(),
-      },
-      body: JSON.stringify({}),
-    })
+	try {
+		const response = await fetch("/api/bank-connections", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-XSRF-TOKEN": getCsrfToken(),
+			},
+			body: JSON.stringify({}),
+		});
 
-    const data = await response.json()
+		const data = await response.json();
 
-    if (response.ok) {
-      authUrl.value = data.authUrl
-      // Stocker l'userId pour plus tard
-      localStorage.setItem('tink_user_id', data.userId)
-      successMessage.value = 'Connexion initiée ! Cliquez sur le bouton pour vous authentifier.'
-    } else {
-      error.value = data.error || 'Erreur lors de la création de la connexion'
-    }
-  } catch (e) {
-    error.value = 'Erreur de connexion au serveur'
-  } finally {
-    isLoading.value = false
-  }
-}
+		if (response.ok && data.success) {
+			// Le nouveau format API encapsule dans data.data
+			const result = data.data || data;
+			authUrl.value = result.authUrl;
+			// Stocker le state pour plus tard
+			if (result.state) {
+				localStorage.setItem("tink_state", result.state);
+			}
+			successMessage.value =
+				"Connexion initiée ! Cliquez sur le bouton pour vous authentifier.";
+		} else {
+			error.value =
+				data.error?.message ||
+				data.error ||
+				"Erreur lors de la création de la connexion";
+		}
+	} catch (e) {
+		error.value = "Erreur de connexion au serveur";
+	} finally {
+		isLoading.value = false;
+	}
+};
 
 // Échanger le code contre un token et récupérer les comptes
 const exchangeCodeForToken = async (code: string) => {
-  isLoading.value = true
-  error.value = null
+	isLoading.value = true;
+	error.value = null;
 
-  try {
-    const response = await fetch('/api/tink/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-XSRF-TOKEN': getCsrfToken(),
-      },
-      body: JSON.stringify({ code }),
-    })
+	try {
+		const response = await fetch("/api/tink/token", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-XSRF-TOKEN": getCsrfToken(),
+			},
+			body: JSON.stringify({ code }),
+		});
 
-    const data = await response.json()
+		const data = await response.json();
 
-    if (response.ok && data.success) {
-      userAccessToken.value = data.accessToken
-      accounts.value = data.accounts
-      isConnected.value = true
-      
-      // Afficher le résultat de l'import
-      if (data.import) {
-        successMessage.value = `✅ ${data.accounts.length} compte(s) connecté(s) ! ${data.import.imported} transactions importées, ${data.import.skipped} doublons ignorés.`
-        syncedTransactions.value = data.import.imported
-      } else {
-        successMessage.value = `${data.accounts.length} compte(s) connecté(s) avec succès !`
-      }
+		if (response.ok && data.success) {
+			// Le nouveau format API encapsule dans data.data
+			const result = data.data || data;
+			userAccessToken.value = result.accessToken;
+			accounts.value = result.accounts || [];
+			isConnected.value = true;
 
-      // Stocker le token
-      localStorage.setItem('tink_access_token', data.accessToken)
-      localStorage.setItem('tink_accounts', JSON.stringify(data.accounts))
-    } else {
-      error.value = data.error || 'Erreur lors de l\'échange du token'
-    }
-  } catch (e) {
-    error.value = 'Erreur de connexion au serveur'
-  } finally {
-    isLoading.value = false
-  }
-}
+			// Afficher le résultat de l'import
+			if (result.import) {
+				successMessage.value = `✅ ${result.accounts?.length || 0} compte(s) connecté(s) ! ${result.import.imported} transactions importées, ${result.import.skipped} doublons ignorés.`;
+				syncedTransactions.value = result.import.imported;
+			} else {
+				successMessage.value = `${result.accounts?.length || 0} compte(s) connecté(s) avec succès !`;
+			}
+
+			// Stocker le token
+			localStorage.setItem("tink_access_token", result.accessToken);
+			localStorage.setItem(
+				"tink_accounts",
+				JSON.stringify(result.accounts || []),
+			);
+		} else {
+			error.value =
+				data.error?.message ||
+				data.error ||
+				"Erreur lors de l'échange du token";
+		}
+	} catch (e) {
+		error.value = "Erreur de connexion au serveur";
+	} finally {
+		isLoading.value = false;
+	}
+};
 
 // Synchroniser les transactions
 const syncTransactions = async (accountId?: string) => {
-  if (!userAccessToken.value) {
-    error.value = 'Vous devez d\'abord connecter votre banque'
-    return
-  }
+	if (!userAccessToken.value) {
+		error.value = "Vous devez d'abord connecter votre banque";
+		return;
+	}
 
-  isSyncing.value = true
-  error.value = null
-  syncedTransactions.value = null
+	isSyncing.value = true;
+	error.value = null;
+	syncedTransactions.value = null;
 
-  try {
-    const response = await fetch('/api/bank-connections/sync', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-XSRF-TOKEN': getCsrfToken(),
-      },
-      body: JSON.stringify({
-        accessToken: userAccessToken.value,
-        accountId,
-      }),
-    })
+	try {
+		const response = await fetch("/api/bank-connections/sync", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-XSRF-TOKEN": getCsrfToken(),
+			},
+			body: JSON.stringify({
+				accessToken: userAccessToken.value,
+				accountId,
+			}),
+		});
 
-    const data = await response.json()
+		const data = await response.json();
 
-    if (response.ok) {
-      syncedTransactions.value = data.count
-      successMessage.value = `${data.count} transactions synchronisées !`
-    } else {
-      error.value = data.error || 'Erreur lors de la synchronisation'
-    }
-  } catch (e) {
-    error.value = 'Erreur de connexion au serveur'
-  } finally {
-    isSyncing.value = false
-  }
-}
+		if (response.ok && data.success) {
+			// Le nouveau format API encapsule dans data.data
+			const result = data.data || data;
+			syncedTransactions.value = result.count;
+			successMessage.value = `${result.count} transactions synchronisées !`;
+		} else {
+			error.value =
+				data.error?.message ||
+				data.error ||
+				"Erreur lors de la synchronisation";
+		}
+	} catch (e) {
+		error.value = "Erreur de connexion au serveur";
+	} finally {
+		isSyncing.value = false;
+	}
+};
 
 // Déconnecter
 const disconnect = async () => {
-  if (!confirm('Êtes-vous sûr de vouloir déconnecter votre compte bancaire ?\n\n⚠️ Toutes les transactions importées seront supprimées et le solde sera remis à zéro.')) {
-    return
-  }
+	if (
+		!confirm(
+			"Êtes-vous sûr de vouloir déconnecter votre compte bancaire ?\n\n⚠️ Toutes les transactions importées seront supprimées et le solde sera remis à zéro.",
+		)
+	) {
+		return;
+	}
 
-  isLoading.value = true
-  error.value = null
-  successMessage.value = null
+	isLoading.value = true;
+	error.value = null;
+	successMessage.value = null;
 
-  try {
-    // Appeler l'API pour supprimer les transactions côté serveur
-    const response = await fetch('/api/bank-connections/disconnect', {
-      method: 'DELETE',
-      headers: {
-        'X-XSRF-TOKEN': getCsrfToken(),
-      },
-    })
+	try {
+		// Appeler l'API pour supprimer les transactions côté serveur
+		const response = await fetch("/api/bank-connections/disconnect", {
+			method: "DELETE",
+			headers: {
+				"X-XSRF-TOKEN": getCsrfToken(),
+			},
+		});
 
-    const data = await response.json()
+		const data = await response.json();
 
-    if (response.ok && data.success) {
-      // Supprimer les données locales
-      localStorage.removeItem('tink_access_token')
-      localStorage.removeItem('tink_accounts')
-      localStorage.removeItem('tink_user_id')
+		if (response.ok && data.success) {
+			// Le nouveau format API encapsule dans data.data
+			const result = data.data || data;
 
-      // Réinitialiser l'état
-      userAccessToken.value = null
-      accounts.value = []
-      isConnected.value = false
-      authUrl.value = null
-      syncedTransactions.value = null
+			// Supprimer les données locales
+			localStorage.removeItem("tink_access_token");
+			localStorage.removeItem("tink_accounts");
+			localStorage.removeItem("tink_user_id");
+			localStorage.removeItem("tink_state");
 
-      successMessage.value = `✅ Compte déconnecté ! ${data.deletedTransactions || 0} transactions supprimées.`
-    } else {
-      error.value = data.error || 'Erreur lors de la déconnexion'
-    }
-  } catch (e) {
-    error.value = 'Erreur de connexion au serveur'
-  } finally {
-    isLoading.value = false
-  }
-}
+			// Réinitialiser l'état
+			userAccessToken.value = null;
+			accounts.value = [];
+			isConnected.value = false;
+			authUrl.value = null;
+			syncedTransactions.value = null;
+
+			successMessage.value = `✅ Compte déconnecté ! ${result.deletedTransactions || 0} transactions supprimées.`;
+		} else {
+			error.value =
+				data.error?.message || data.error || "Erreur lors de la déconnexion";
+		}
+	} catch (e) {
+		error.value = "Erreur de connexion au serveur";
+	} finally {
+		isLoading.value = false;
+	}
+};
 
 // Vérifier les paramètres URL et l'état local au chargement
 onMounted(async () => {
-  const urlParams = new URLSearchParams(window.location.search)
-  const bankConnection = urlParams.get('bankConnection')
-  const code = urlParams.get('code')
-  const errorMsg = urlParams.get('message')
+	const urlParams = new URLSearchParams(window.location.search);
+	const bankConnection = urlParams.get("bankConnection");
+	const code = urlParams.get("code");
+	const errorMsg = urlParams.get("message");
 
-  // Gérer le callback de Tink
-  if (bankConnection === 'success' && code) {
-    await exchangeCodeForToken(code)
-    // Nettoyer l'URL
-    window.history.replaceState({}, '', '/settings')
-  } else if (bankConnection === 'error') {
-    error.value = errorMsg || 'Erreur lors de la connexion bancaire'
-    window.history.replaceState({}, '', '/settings')
-  }
+	// Gérer le callback de Tink
+	if (bankConnection === "success" && code) {
+		await exchangeCodeForToken(code);
+		// Nettoyer l'URL
+		window.history.replaceState({}, "", "/settings");
+	} else if (bankConnection === "error") {
+		error.value = errorMsg || "Erreur lors de la connexion bancaire";
+		window.history.replaceState({}, "", "/settings");
+	}
 
-  // Restaurer l'état depuis le localStorage
-  const storedToken = localStorage.getItem('tink_access_token')
-  const storedAccounts = localStorage.getItem('tink_accounts')
+	// Restaurer l'état depuis le localStorage
+	const storedToken = localStorage.getItem("tink_access_token");
+	const storedAccounts = localStorage.getItem("tink_accounts");
 
-  if (storedToken && storedAccounts) {
-    try {
-      const parsedAccounts = JSON.parse(storedAccounts)
-      if (Array.isArray(parsedAccounts) && parsedAccounts.length > 0) {
-        userAccessToken.value = storedToken
-        accounts.value = parsedAccounts
-        isConnected.value = true
-        console.log('🔄 Session Tink restaurée:', parsedAccounts.length, 'compte(s)')
-      }
-    } catch (e) {
-      // Données corrompues, nettoyer
-      localStorage.removeItem('tink_access_token')
-      localStorage.removeItem('tink_accounts')
-      console.log('🧹 Données Tink corrompues, nettoyage effectué')
-    }
-  }
-})
+	if (storedToken && storedAccounts) {
+		try {
+			const parsedAccounts = JSON.parse(storedAccounts);
+			if (Array.isArray(parsedAccounts) && parsedAccounts.length > 0) {
+				userAccessToken.value = storedToken;
+				accounts.value = parsedAccounts;
+				isConnected.value = true;
+				console.log(
+					"🔄 Session Tink restaurée:",
+					parsedAccounts.length,
+					"compte(s)",
+				);
+			}
+		} catch (e) {
+			// Données corrompues, nettoyer
+			localStorage.removeItem("tink_access_token");
+			localStorage.removeItem("tink_accounts");
+			console.log("🧹 Données Tink corrompues, nettoyage effectué");
+		}
+	}
+});
 </script>
 
 <template>

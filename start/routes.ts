@@ -25,6 +25,8 @@ router
   .group(() => {
     router.post('/import', [ImportsController, 'store'])
     router.get('/transactions', [ImportsController, 'index'])
+    router.post('/transactions', [ImportsController, 'createTransaction'])
+    router.delete('/transactions/:id', [ImportsController, 'destroy'])
     router.put('/settings', [SettingsController, 'update'])
 
     // Tink Bank Connections

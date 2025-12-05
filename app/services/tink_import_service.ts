@@ -150,34 +150,8 @@ export default class TinkImportService {
     const account = await Account.find(accountId)
     if (!account) return
 
-    // Calculer les crédits
-    const creditsResult = await Transaction.query()
-      .where('accountId', accountId)
-      .where('type', 'credit')
-      .sum('amount as total')
-      .first()
-
-    // Calculer les débits
-    const debitsResult = await Transaction.query()
-      .where('accountId', accountId)
-      .where('type', 'debit')
-      .sum('amount as total')
-      .first()
-
-    // S'assurer que les valeurs sont des nombres valides (pas NaN)
-    const credits = parseFloat(creditsResult?.$extras?.total) || 0
-    const debits = parseFloat(debitsResult?.$extras?.total) || 0
-    const initialBalance = parseFloat(String(account.initialBalance)) || 0
-
-    // Le solde = solde initial + crédits - débits
-    const newBalance = initialBalance + credits - debits
-    
-    // Vérifier que le résultat n'est pas NaN
-    account.balance = isNaN(newBalance) ? initialBalance : newBalance
-
-    console.log(`💰 Solde mis à jour: initial=${initialBalance}, crédits=${credits}, débits=${debits}, final=${account.balance}`)
-
-    await account.save()
+    const newBalance = await account.calculateAndUpdateBalance()
+    console.log(`💰 Solde mis à jour pour le compte ${accountId}: ${newBalance}`)
   }
 
   /**

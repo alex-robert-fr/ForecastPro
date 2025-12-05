@@ -1,160 +1,191 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3'
-import { ref, computed, onMounted } from 'vue'
-import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card'
-import { 
-  Wallet, 
-  TrendingUp, 
-  TrendingDown, 
-  ArrowUpRight, 
-  ArrowDownRight,
-  CreditCard,
-  PiggyBank,
-  Target,
-  Sparkles,
-  ChevronRight,
-  Calendar,
-  BarChart3,
-  ArrowLeftRight
-} from 'lucide-vue-next'
-import FloatingDock from '~/components/FloatingDock.vue'
+import { Head, Link } from "@inertiajs/vue3";
+import { ref, computed, onMounted } from "vue";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+	Wallet,
+	TrendingUp,
+	TrendingDown,
+	ArrowUpRight,
+	ArrowDownRight,
+	CreditCard,
+	PiggyBank,
+	Target,
+	Sparkles,
+	ChevronRight,
+	Calendar,
+	BarChart3,
+	ArrowLeftRight,
+} from "lucide-vue-next";
+import FloatingDock from "~/components/FloatingDock.vue";
 
 interface Transaction {
-  id: number
-  date: string
-  label: string
-  amount: number
-  type: 'debit' | 'credit'
-  merchant: string | null
-  paymentMethod: string | null
+	id: number;
+	date: string;
+	label: string;
+	amount: number;
+	type: "debit" | "credit";
+	merchant: string | null;
+	paymentMethod: string | null;
 }
 
 interface DashboardData {
-  balance: number
-  transactions: Transaction[]
-  monthlyIncome: number
-  monthlyExpenses: number
-  savingsRate: number
+	balance: number;
+	transactions: Transaction[];
+	monthlyIncome: number;
+	monthlyExpenses: number;
+	savingsRate: number;
 }
 
 const dashboardData = ref<DashboardData>({
-  balance: 0,
-  transactions: [],
-  monthlyIncome: 0,
-  monthlyExpenses: 0,
-  savingsRate: 0
-})
+	balance: 0,
+	transactions: [],
+	monthlyIncome: 0,
+	monthlyExpenses: 0,
+	savingsRate: 0,
+});
 
-const isLoading = ref(true)
+const isLoading = ref(true);
 
 const formatAmount = (amount: number) => {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(amount)
-}
+	return new Intl.NumberFormat("fr-FR", {
+		style: "currency",
+		currency: "EUR",
+	}).format(amount);
+};
 
 const formatAmountCompact = (amount: number) => {
-  if (Math.abs(amount) >= 1000) {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR',
-      notation: 'compact',
-      maximumFractionDigits: 1,
-    }).format(amount)
-  }
-  return formatAmount(amount)
-}
+	if (Math.abs(amount) >= 1000) {
+		return new Intl.NumberFormat("fr-FR", {
+			style: "currency",
+			currency: "EUR",
+			notation: "compact",
+			maximumFractionDigits: 1,
+		}).format(amount);
+	}
+	return formatAmount(amount);
+};
 
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
-  })
-}
+	return new Date(dateStr).toLocaleDateString("fr-FR", {
+		day: "2-digit",
+		month: "short",
+	});
+};
 
 const recentTransactions = computed(() => {
-  return dashboardData.value.transactions.slice(0, 5)
-})
+	return dashboardData.value.transactions.slice(0, 5);
+});
 
 const currentMonth = computed(() => {
-  return new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
-})
+	return new Date().toLocaleDateString("fr-FR", {
+		month: "long",
+		year: "numeric",
+	});
+});
 
 // Calculer les données par catégorie de dépenses (simulé basé sur les transactions)
 const expensesByCategory = computed(() => {
-  const categories: Record<string, { amount: number; color: string; label: string }> = {
-    'shopping': { amount: 0, color: 'bg-violet-500', label: 'Shopping' },
-    'food': { amount: 0, color: 'bg-amber-500', label: 'Alimentation' },
-    'transport': { amount: 0, color: 'bg-blue-500', label: 'Transport' },
-    'other': { amount: 0, color: 'bg-slate-500', label: 'Autres' }
-  }
-  
-  dashboardData.value.transactions
-    .filter(t => t.type === 'debit')
-    .forEach(t => {
-      const label = t.label.toLowerCase()
-      if (label.includes('carrefour') || label.includes('leclerc') || label.includes('auchan') || label.includes('lidl')) {
-        categories.food.amount += Math.abs(t.amount)
-      } else if (label.includes('sncf') || label.includes('ratp') || label.includes('essence') || label.includes('total')) {
-        categories.transport.amount += Math.abs(t.amount)
-      } else if (label.includes('amazon') || label.includes('fnac') || label.includes('zara')) {
-        categories.shopping.amount += Math.abs(t.amount)
-      } else {
-        categories.other.amount += Math.abs(t.amount)
-      }
-    })
-  
-  return Object.values(categories).filter(c => c.amount > 0).sort((a, b) => b.amount - a.amount)
-})
+	const categories: Record<
+		string,
+		{ amount: number; color: string; label: string }
+	> = {
+		shopping: { amount: 0, color: "bg-violet-500", label: "Shopping" },
+		food: { amount: 0, color: "bg-amber-500", label: "Alimentation" },
+		transport: { amount: 0, color: "bg-blue-500", label: "Transport" },
+		other: { amount: 0, color: "bg-slate-500", label: "Autres" },
+	};
+
+	dashboardData.value.transactions
+		.filter((t) => t.type === "debit")
+		.forEach((t) => {
+			const label = t.label.toLowerCase();
+			if (
+				label.includes("carrefour") ||
+				label.includes("leclerc") ||
+				label.includes("auchan") ||
+				label.includes("lidl")
+			) {
+				categories.food.amount += Math.abs(t.amount);
+			} else if (
+				label.includes("sncf") ||
+				label.includes("ratp") ||
+				label.includes("essence") ||
+				label.includes("total")
+			) {
+				categories.transport.amount += Math.abs(t.amount);
+			} else if (
+				label.includes("amazon") ||
+				label.includes("fnac") ||
+				label.includes("zara")
+			) {
+				categories.shopping.amount += Math.abs(t.amount);
+			} else {
+				categories.other.amount += Math.abs(t.amount);
+			}
+		});
+
+	return Object.values(categories)
+		.filter((c) => c.amount > 0)
+		.sort((a, b) => b.amount - a.amount);
+});
 
 const totalExpenses = computed(() => {
-  return expensesByCategory.value.reduce((sum, cat) => sum + cat.amount, 0)
-})
+	return expensesByCategory.value.reduce((sum, cat) => sum + cat.amount, 0);
+});
 
 const loadDashboard = async () => {
-  if (typeof window === 'undefined') return
-  
-  try {
-    const response = await fetch('/api/transactions')
-    const data = await response.json()
-    const transactions = data.transactions || []
-    const balance = data.account?.balance || 0
-    
-    // Calculer les revenus et dépenses du mois en cours
-    const now = new Date()
-    const currentMonthTransactions = transactions.filter((t: Transaction) => {
-      const date = new Date(t.date)
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-    })
-    
-    const monthlyIncome = currentMonthTransactions
-      .filter((t: Transaction) => t.type === 'credit')
-      .reduce((sum: number, t: Transaction) => sum + Number(t.amount), 0)
-    
-    const monthlyExpenses = currentMonthTransactions
-      .filter((t: Transaction) => t.type === 'debit')
-      .reduce((sum: number, t: Transaction) => sum + Math.abs(Number(t.amount)), 0)
-    
-    const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100 : 0
-    
-    dashboardData.value = {
-      balance,
-      transactions,
-      monthlyIncome,
-      monthlyExpenses,
-      savingsRate: Math.max(0, savingsRate)
-    }
-  } catch (error) {
-    console.error('Erreur lors du chargement du dashboard:', error)
-  } finally {
-    isLoading.value = false
-  }
-}
+	if (typeof window === "undefined") return;
+
+	try {
+		const response = await fetch("/api/transactions");
+		const data = await response.json();
+		const transactions = data.transactions || [];
+		const balance = data.account?.balance || 0;
+
+		// Calculer les revenus et dépenses du mois en cours
+		const now = new Date();
+		const currentMonthTransactions = transactions.filter((t: Transaction) => {
+			const date = new Date(t.date);
+			return (
+				date.getMonth() === now.getMonth() &&
+				date.getFullYear() === now.getFullYear()
+			);
+		});
+
+		const monthlyIncome = currentMonthTransactions
+			.filter((t: Transaction) => t.type === "credit")
+			.reduce((sum: number, t: Transaction) => sum + Number(t.amount), 0);
+
+		const monthlyExpenses = currentMonthTransactions
+			.filter((t: Transaction) => t.type === "debit")
+			.reduce(
+				(sum: number, t: Transaction) => sum + Math.abs(Number(t.amount)),
+				0,
+			);
+
+		const savingsRate =
+			monthlyIncome > 0
+				? ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100
+				: 0;
+
+		dashboardData.value = {
+			balance,
+			transactions,
+			monthlyIncome,
+			monthlyExpenses,
+			savingsRate: Math.max(0, savingsRate),
+		};
+	} catch (error) {
+		console.error("Erreur lors du chargement du dashboard:", error);
+	} finally {
+		isLoading.value = false;
+	}
+};
 
 onMounted(() => {
-  loadDashboard()
-})
+	loadDashboard();
+});
 </script>
 
 <template>
@@ -218,7 +249,7 @@ onMounted(() => {
                   </div>
                   <span class="text-slate-400 text-sm">Revenus</span>
                 </div>
-                <p class="font-semibold text-emerald-400 text-2xl">+{{ formatAmountCompact(dashboardData.monthlyIncome) }}</p>
+                <p class="font-semibold text-emerald-400 text-2xl">+{{ formatAmount(dashboardData.monthlyIncome) }}</p>
               </div>
               <div class="bg-slate-800/40 p-4 border border-slate-700/30 rounded-xl">
                 <div class="flex items-center gap-2 mb-2">

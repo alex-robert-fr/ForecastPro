@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Account from '#models/account'
-import Transaction from '#models/transaction'
 
 export default class SettingsController {
   /**
@@ -44,15 +43,8 @@ export default class SettingsController {
       await account.save()
     }
 
-    // Recalculer le solde total = solde initial + somme des transactions
-    const totalResult = await Transaction.query()
-      .where('accountId', account.id)
-      .sum('amount as total')
-      .first()
-
-    const transactionsTotal = Number(totalResult?.$extras.total) || 0
-    account.balance = account.initialBalance + transactionsTotal
-    await account.save()
+    // Recalculer le solde total
+    await account.calculateAndUpdateBalance()
 
     return response.ok({
       success: true,

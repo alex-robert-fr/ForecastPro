@@ -26,7 +26,8 @@ import {
   GraduationCap,
   MoreHorizontal,
   Check,
-  Trash2
+  Trash2,
+  Plus
 } from 'lucide-vue-next'
 import FloatingDock from '~/components/FloatingDock.vue'
 import { useCategoryRules, type Category } from '~/composables/useCategoryRules'
@@ -79,6 +80,19 @@ const selectedTransaction = ref<Transaction | null>(null)
 const extractedKeywords = ref<string[]>([])
 const selectedKeywords = ref<string[]>([]) // Maintenant un tableau pour sélection multiple
 const customKeyword = ref('')
+
+// Modal de création de transaction
+const showCreateModal = ref(false)
+const isCreating = ref(false)
+const newTransaction = ref({
+	date: new Date().toISOString().split("T")[0],
+	label: "",
+	amount: "",
+	type: "debit" as "debit" | "credit",
+	merchant: "",
+	category: "",
+	paymentMethod: "",
+})
 
 const iconComponents: Record<string, any> = {
   utensils: Utensils,
@@ -328,6 +342,114 @@ const removeExistingRule = (ruleId: string) => {
   removeRule(ruleId)
 }
 
+const createTransaction = async () => {
+	if (!newTransaction.value.label || !newTransaction.value.amount) {
+		alert("Veuillez remplir tous les champs obligatoires");
+		return;
+	}
+
+	const amount = parseFloat(newTransaction.value.amount);
+	if (Number.isNaN(amount) || amount <= 0) {
+		alert("Le montant doit être un nombre positif");
+		return;
+	}
+
+	isCreating.value = true;
+
+	try {
+		const response = await fetch("/api/transactions", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-XSRF-TOKEN": getCsrfToken(),
+			},
+			body: JSON.stringify({
+				date: newTransaction.value.date,
+				label: newTransaction.value.label,
+				amount: amount,
+				type: newTransaction.value.type,
+				merchant: newTransaction.value.merchant || null,
+				category: newTransaction.value.category || null,
+				paymentMethod: newTransaction.value.paymentMethod || null,
+			}),
+		});
+
+		const data = await response.json();
+
+		if (!response.ok) {
+			throw new Error(data.error || "Erreur lors de la création");
+		}
+
+		// Réinitialiser le formulaire
+		newTransaction.value = {
+			date: new Date().toISOString().split("T")[0],
+			label: "",
+			amount: "",
+			type: "debit",
+			merchant: "",
+			category: "",
+			paymentMethod: "",
+		};
+
+		// Fermer le modal
+		showCreateModal.value = false;
+
+		// Recharger les transactions
+		await loadTransactions();
+	} catch (error) {
+		console.error("Erreur:", error);
+		alert(
+			error instanceof Error
+				? error.message
+				: "Erreur lors de la création de la transaction",
+		);
+	} finally {
+		isCreating.value = false;
+	}
+};
+
+const openCreateModal = () => {
+	showCreateModal.value = true;
+};
+
+const closeCreateModal = () => {
+	showCreateModal.value = false;
+};
+
+const deleteTransaction = async (transactionId: number, event: Event) => {
+	// Empêcher l'ouverture du modal de catégorisation
+	event.stopPropagation();
+
+	if (!confirm("Êtes-vous sûr de vouloir supprimer cette transaction ?")) {
+		return;
+	}
+
+	try {
+		const response = await fetch(`/api/transactions/${transactionId}`, {
+			method: "DELETE",
+			headers: {
+				"X-XSRF-TOKEN": getCsrfToken(),
+			},
+		});
+
+		const data = await response.json();
+
+		if (!response.ok) {
+			throw new Error(data.error || "Erreur lors de la suppression");
+		}
+
+		// Recharger les transactions
+		await loadTransactions();
+	} catch (error) {
+		console.error("Erreur:", error);
+		alert(
+			error instanceof Error
+				? error.message
+				: "Erreur lors de la suppression de la transaction",
+		);
+	}
+};
+
 onMounted(() => {
   initialize()
   loadTransactions()
@@ -352,10 +474,21 @@ onMounted(() => {
             </div>
           </div>
           
-          <!-- Uncategorized badge -->
-          <div v-if="uncategorizedCount > 0" class="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
-            <Tag class="w-4 h-4 text-amber-400" />
-            <span class="text-amber-400 text-sm font-medium">{{ uncategorizedCount }} non catégorisée{{ uncategorizedCount > 1 ? 's' : '' }}</span>
+          <div class="flex items-center gap-3">
+            <!-- Uncategorized badge -->
+            <div v-if="uncategorizedCount > 0" class="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5">
+              <Tag class="w-4 h-4 text-amber-400" />
+              <span class="text-amber-400 text-sm font-medium">{{ uncategorizedCount }} non catégorisée{{ uncategorizedCount > 1 ? 's' : '' }}</span>
+            </div>
+            
+            <!-- Bouton nouvelle transaction -->
+            <button
+              @click="openCreateModal"
+              class="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              <Plus class="w-4 h-4" />
+              Nouvelle transaction
+            </button>
           </div>
         </div>
       </div>
@@ -621,14 +754,23 @@ onMounted(() => {
                   </div>
                 </div>
               </div>
-              <p
-                :class="[
-                  'font-semibold tabular-nums whitespace-nowrap shrink-0',
-                  transaction.type === 'credit' ? 'text-emerald-400' : 'text-rose-400',
-                ]"
-              >
-                {{ transaction.type === 'credit' ? '+' : '' }}{{ formatAmount(transaction.amount) }}
-              </p>
+              <div class="flex items-center gap-3 shrink-0">
+                <p
+                  :class="[
+                    'font-semibold tabular-nums whitespace-nowrap',
+                    transaction.type === 'credit' ? 'text-emerald-400' : 'text-rose-400',
+                  ]"
+                >
+                  {{ transaction.type === 'credit' ? '+' : '' }}{{ formatAmount(transaction.amount) }}
+                </p>
+                <button
+                  @click="deleteTransaction(transaction.id, $event)"
+                  class="opacity-0 group-hover:opacity-100 p-2 hover:bg-rose-500/10 rounded-lg transition-all text-rose-400 hover:text-rose-300"
+                  title="Supprimer la transaction"
+                >
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -834,6 +976,160 @@ onMounted(() => {
         </div>
       </Transition>
     </Teleport>
+
+    <!-- Modal de création de transaction -->
+    <div
+      v-if="showCreateModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      @click.self="closeCreateModal"
+    >
+      <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-md mx-4">
+        <div class="flex justify-between items-center p-6 border-b border-slate-800">
+          <h2 class="font-semibold text-white text-lg">Nouvelle transaction</h2>
+          <button
+            @click="closeCreateModal"
+            class="text-slate-400 hover:text-white transition-colors"
+          >
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <form @submit.prevent="createTransaction" class="p-6 space-y-4">
+          <!-- Type de transaction -->
+          <div>
+            <label class="block text-slate-300 text-sm font-medium mb-2">
+              Type <span class="text-rose-500">*</span>
+            </label>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                @click="newTransaction.type = 'debit'"
+                :class="[
+                  'flex-1 px-4 py-2 rounded-lg font-medium transition-colors',
+                  newTransaction.type === 'debit'
+                    ? 'bg-rose-500/20 text-rose-400 border border-rose-500/50'
+                    : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-800/80',
+                ]"
+              >
+                Dépense
+              </button>
+              <button
+                type="button"
+                @click="newTransaction.type = 'credit'"
+                :class="[
+                  'flex-1 px-4 py-2 rounded-lg font-medium transition-colors',
+                  newTransaction.type === 'credit'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
+                    : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-800/80',
+                ]"
+              >
+                Revenu
+              </button>
+            </div>
+          </div>
+
+          <!-- Date -->
+          <div>
+            <label class="block text-slate-300 text-sm font-medium mb-2">
+              Date <span class="text-rose-500">*</span>
+            </label>
+            <input
+              v-model="newTransaction.date"
+              type="date"
+              required
+              class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            />
+          </div>
+
+          <!-- Libellé -->
+          <div>
+            <label class="block text-slate-300 text-sm font-medium mb-2">
+              Libellé <span class="text-rose-500">*</span>
+            </label>
+            <input
+              v-model="newTransaction.label"
+              type="text"
+              required
+              placeholder="Ex: Achat chez Amazon"
+              class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            />
+          </div>
+
+          <!-- Montant -->
+          <div>
+            <label class="block text-slate-300 text-sm font-medium mb-2">
+              Montant (€) <span class="text-rose-500">*</span>
+            </label>
+            <input
+              v-model="newTransaction.amount"
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              placeholder="0.00"
+              class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            />
+          </div>
+
+          <!-- Commerçant -->
+          <div>
+            <label class="block text-slate-300 text-sm font-medium mb-2">
+              Commerçant
+            </label>
+            <input
+              v-model="newTransaction.merchant"
+              type="text"
+              placeholder="Ex: Amazon, Carrefour..."
+              class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            />
+          </div>
+
+          <!-- Catégorie -->
+          <div>
+            <label class="block text-slate-300 text-sm font-medium mb-2">
+              Catégorie
+            </label>
+            <input
+              v-model="newTransaction.category"
+              type="text"
+              placeholder="Ex: Alimentation, Transport..."
+              class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            />
+          </div>
+
+          <!-- Moyen de paiement -->
+          <div>
+            <label class="block text-slate-300 text-sm font-medium mb-2">
+              Moyen de paiement
+            </label>
+            <input
+              v-model="newTransaction.paymentMethod"
+              type="text"
+              placeholder="Ex: Carte, Virement, Prélèvement..."
+              class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            />
+          </div>
+
+          <!-- Actions -->
+          <div class="flex gap-3 pt-4">
+            <button
+              type="button"
+              @click="closeCreateModal"
+              class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-800/80 text-slate-300 rounded-lg font-medium transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              :disabled="isCreating"
+              class="flex-1 px-4 py-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+            >
+              {{ isCreating ? "Création..." : "Créer" }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <FloatingDock />
   </div>
